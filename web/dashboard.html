@@ -107,14 +107,20 @@
 .jf-item { display: grid; gap: 4px; padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid #e3ddd7; min-width: 0; }
 .jf-item:last-child { border-bottom: 0; }
 .jf-src { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.jf-src .jf-label { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.jf-src .jf-label { color: var(--m_black); }
 .jf-src .jf-page { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
 .jf-refs { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
 .jf-ref { font-family: "Space Mono", monospace; font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
 .jf-court { font-family: "Rubik", sans-serif; font-weight: 600; font-size: 15px; }
 .jf .jf-title { margin: 0; font-size: 1.12em; line-height: 1.4; text-align: left; hyphens: manual; }
-.jf .jf-summary { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
-.jf .jf-summary.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.jf .jf-summary { margin: 0; line-height: 1.5; overflow-wrap: anywhere; text-align: left; hyphens: manual; -webkit-hyphens: manual; }
+.jf .fold.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.jf-decision { font-family: "Rubik", sans-serif; font-size: 14px; line-height: 1.55; color: #4a4440; border-left: 3px solid var(--m_black); padding-left: 10px; margin-top: 2px; overflow-wrap: anywhere; }
+.jf-decision.main { font-size: 15px; color: var(--m_black); }
+.jf .jf-decision.fold.clamp { -webkit-line-clamp: 2; }
+.jf .jf-decision.main.fold.clamp { -webkit-line-clamp: 4; }
+.jf-decision b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--m_black); margin-right: 8px; }
+.jf-refs a.jf-ref { text-decoration-thickness: 1px; }
 .jf-more { font-family: "Space Mono", monospace; font-size: 12px; color: var(--m_black_text); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; justify-self: start; }
 .jf-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
 .jf-pill { font-family: "Space Mono", monospace; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 7px; white-space: nowrap; }
@@ -131,10 +137,6 @@
 .jf-change small { font-weight: 400; margin-left: 4px; }
 .jf .jf-summary.jf-excerpt, .jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
 .jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
-.jf-outcome-label { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--m_red); }
-.jf .jf-outcome { margin: 0; font-weight: 500; }
-.jf .jf-outcome.secondary { font-weight: 400; font-size: 0.92em; color: var(--m_black_text); }
-.jf .jf-summary.secondary.clamp { -webkit-line-clamp: 2; }
 .jf-item.is-tech { opacity: 0.75; }
 .jf-loadmore { justify-self: start; }
 .jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
@@ -420,24 +422,31 @@
   }
   // A long text is shown clamped with a toggle; fitClamps() drops the toggle
   // wherever the whole text fits after all, which only layout can tell.
-  function clamped(text, cls, more) {
-    const p = el("p", { class: `jf-summary ${cls || ""} clamp`.replace(/\s+/g, " "), text });
-    const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: more });
-    btn.addEventListener("click", () => {
-      const isClamped = p.classList.toggle("clamp");
-      btn.setAttribute("aria-expanded", String(!isClamped));
-      btn.textContent = isClamped ? more : "Kevesebb";
+  // Long texts are folded. Each item has one toggle, shown only where layout
+  // says something is actually cut off.
+  function fitItem(item) {
+    const btn = item.querySelector(".jf-more");
+    if (!btn || btn.getAttribute("aria-expanded") === "true") return;
+    let cut = false;
+    item.querySelectorAll(".fold").forEach(f => {
+      f.classList.add("clamp");
+      if (f.scrollHeight - f.clientHeight > 2) cut = true; else f.classList.remove("clamp");
     });
-    return [p, btn];
+    btn.hidden = !cut;
   }
-  function fitClamps(root) {
-    root.querySelectorAll("p.clamp").forEach(p => {
-      const btn = p.nextElementSibling && p.nextElementSibling.classList.contains("jf-more") ? p.nextElementSibling : null;
-      if (p.scrollHeight - p.clientHeight <= 2) { p.classList.remove("clamp"); if (btn) btn.hidden = true; }
-      else if (btn) btn.hidden = false;
-    });
+  const fitClamps = root => root.querySelectorAll(".jf-item").forEach(fitItem);
+  function moreButton() {
+    return el("button", { type: "button", class: "jf-more", hidden: true, "aria-expanded": "false", text: "Tovább",
+      onclick: e => {
+        const btn = e.currentTarget, item = btn.closest(".jf-item"), open = btn.getAttribute("aria-expanded") !== "true";
+        btn.setAttribute("aria-expanded", String(open));
+        btn.textContent = open ? "Kevesebb" : "Tovább";
+        if (open) item.querySelectorAll(".fold").forEach(f => f.classList.remove("clamp"));
+        else fitItem(item);
+      } });
   }
-  const summaryBlock = text => clamped(text, "", "Teljes szöveg");
+  const meta = (...parts) => el("div", { class: "jf-meta" }, moreButton(), ...parts);
+  const summaryBlock = text => [el("p", { class: "jf-summary fold clamp", text })];
   function scorePill(h) {
     if (h.score == null) return null;
     return el("span", { class: "jf-pill " + (h.strong ? "strong" : "maybe"), title: `Kulcsszó-pontszám: ${h.score}`, text: `${h.strong ? "erős" : "lehetséges"} · ${h.score}` });
@@ -448,25 +457,22 @@
 
   function marked(text, marks) {
     // Highlight the spans the watcher matched; everything stays text nodes.
-    // Clamped like the other long texts: a quoted new section can be long.
-    const [p, btn] = clamped("", "jf-excerpt", "Teljes szöveg");
+    const p = el("p", { class: "jf-summary jf-excerpt fold clamp" });
     let at = 0;
     (Array.isArray(marks) ? marks : []).filter(m => Array.isArray(m) && m[0] >= at && m[1] <= text.length && m[1] > m[0])
       .forEach(([a, b]) => { p.append(text.slice(at, a), el("mark", { text: text.slice(a, b) })); at = b; });
     p.append(text.slice(at));
-    return [p, btn];
+    return [p];
   }
 
   function decisionBlock(h, principle) {
-    // The principle is the body text; the decision follows it, smaller and
-    // folded to two lines. Without a principle the decision is the body.
+    // The principle is the body text; the decision follows it in a smaller
+    // block. Without a principle the decision is the body.
     const out = [];
     if (principle) out.push(...summaryBlock(principle));
     if (h.outcome) {
-      const label = [h.form ? h.form.charAt(0).toUpperCase() + h.form.slice(1) : "Döntés",
-        h.decided && parseDay(h.decided) ? `kelt ${short(parseDay(h.decided))}` : null].filter(Boolean).join(" · ");
-      out.push(el("div", { class: "jf-outcome-label", text: label }));
-      out.push(...clamped(h.outcome, principle ? "jf-outcome secondary" : "jf-outcome", "Teljes rendelkező rész"));
+      const label = [h.form || "döntés", h.decided && parseDay(h.decided) ? short(parseDay(h.decided)) : null].filter(Boolean).join(" · ");
+      out.push(el("div", { class: "jf-decision fold clamp" + (principle ? "" : " main") }, el("b", { text: label }), h.outcome));
     }
     return out;
   }
@@ -484,35 +490,36 @@
       if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
       const changes = Array.isArray(h.changes) ? h.changes : [];
       const topic = h.topic && typeof h.topic === "object" ? h.topic : null;
-      if (topic) kids.push(el("div", { class: "jf-changes" }, el("span", { class: "jf-change" + (topic.weight >= 8 ? " hot" : ""), title: "A cím alapján" },
-        `Tárgy: ${topic.note || ""}`, el("small", { text: `súly ${topic.weight}` }))));
-      if (changes.length) kids.push(el("div", { class: "jf-changes", "aria-label": "Módosított szakaszok" }, changes.slice(0, 10).map(c =>
-        el("span", { class: "jf-change" + (c.wording ? " wording" : c.weight >= 8 ? " hot" : ""),
-          title: c.wording ? "csak szövegrész változik" : `súly ${c.weight}` }, where(c), el("small", { text: c.wording ? "szövegrész" : `súly ${c.weight}` })))));
+      const chips = [];
+      if (topic) chips.push(el("span", { class: "jf-change" + (topic.weight >= 8 ? " hot" : ""), title: "A cím alapján" },
+        `Tárgy: ${topic.note || ""}`, el("small", { text: `súly ${topic.weight}` })));
+      changes.slice(0, 10).forEach(c => chips.push(el("span", { class: "jf-change" + (c.wording ? " wording" : c.weight >= 8 ? " hot" : ""),
+        title: c.wording ? "csak szövegrész változik" : `súly ${c.weight}` }, where(c), el("small", { text: c.wording ? "szövegrész" : `súly ${c.weight}` }))));
+      if (chips.length) kids.push(el("div", { class: "jf-changes", "aria-label": "Módosított szakaszok" }, chips));
       if (h.excerpt) kids.push(...marked(h.excerpt, h.marks));
-      kids.push(el("div", { class: "jf-meta" }, h.effective ? el("span", { text: `Hatálybalépés: ${h.effective}` }) : null,
+      kids.push(meta(h.effective ? el("span", { text: `Hatálybalépés: ${h.effective}` }) : null,
         link(h.issue || "Közlöny", h.url), link("PDF", h.pdf)));
     } else if (h.k === "bhgy") {
       kids.push(el("div", { class: "jf-refs" }, group.map((x, i) => el("span", {},
         i === 0 || x.court !== group[i - 1].court ? el("span", { class: "jf-court", text: (x.court || "") + " " }) : null,
         link(x.ref || "határozat", x.pdf, "jf-ref") || el("span", { class: "jf-ref", text: x.ref || "" })))));
       kids.push(...decisionBlock(h, h.summary));
-      kids.push(el("div", { class: "jf-meta" }, group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null,
+      kids.push(meta(group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null,
         h.technical ? el("span", { text: h.technical }) : null));
     } else if (h.k === "kuria") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-court", text: h.ref || "" })));
       if (h.outcome) kids.push(...decisionBlock(h, h.title));
       else if (h.title) kids.push(...summaryBlock(h.title));
-      kids.push(el("div", { class: "jf-meta" }, scorePill(h), link("A Kúria oldalán", h.url), terms(h)));
+      kids.push(meta(scorePill(h), link("A Kúria oldalán", h.url), terms(h)));
     } else if (h.k === "kuria_bh") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-page", text: h.case || "" })));
       kids.push(...decisionBlock(h, h.title));
-      kids.push(el("div", { class: "jf-meta" }, h.section ? el("span", { text: h.section }) : null, link(h.issue || "Lapszám (PDF)", h.url)));
+      kids.push(meta(h.section ? el("span", { text: h.section }) : null, link(h.issue || "Lapszám (PDF)", h.url)));
     } else if (h.k === "ab") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-court", text: h.kind || "" })));
       if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
       kids.push(...decisionBlock(h, null));
-      kids.push(el("div", { class: "jf-meta" }, link("Döntés (PDF)", h.pdf), link("Adatlap", h.url), terms(h)));
+      kids.push(meta(link("Döntés (PDF)", h.pdf), link("Adatlap", h.url), terms(h)));
     }
     return el("article", { class: "jf-item" + (h.technical ? " is-tech" : "") }, kids);
   }
@@ -574,13 +581,7 @@
     lastWidth = window.innerWidth;
     clearTimeout(resizeTimer);
     // Re-clamp everything collapsed, then keep toggles only where text is cut off.
-    resizeTimer = setTimeout(() => {
-      $("feed").querySelectorAll("p.jf-summary").forEach(p => {
-        const btn = p.nextElementSibling && p.nextElementSibling.classList.contains("jf-more") ? p.nextElementSibling : null;
-        if (btn && btn.getAttribute("aria-expanded") !== "true") p.classList.add("clamp");
-      });
-      fitClamps($("feed"));
-    }, 200);
+    resizeTimer = setTimeout(() => fitClamps($("feed")), 200);
   });
 
   // data.json sits beside this page and is rewritten after every run.
