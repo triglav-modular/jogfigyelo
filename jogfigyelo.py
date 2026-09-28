@@ -465,10 +465,13 @@ def decision_parts(text):
     hearings are dropped. Returns {} when the markers are not there.
     """
     text = re.sub(r"\b(?:\w ){3,}\w\b", lambda w: w.group(0).replace(" ", ""), text)  # k i j a v í t ó
-    m = OPERATIVE.search(text)
-    end = REASONS.search(text, m.end()) if m else None
-    if not end:
+    # The operative part follows the last marker before the reasons: header
+    # fields such as "A fellebbezéssel támadott határozat:" come earlier.
+    end = REASONS.search(text)
+    marks = list(OPERATIVE.finditer(text, 0, end.start())) if end else []
+    if not marks:
         return {}
+    m = marks[-1]
     word = (m.group("cap") or m.group("acc") or "").lower()
     qualifier = ((m.group("q") or m.group("qcap") or "") + word).lower()
     qualifier = next((q for q in QUALIFIERS if qualifier.startswith(q)), "")
