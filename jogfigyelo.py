@@ -22,12 +22,12 @@ run exits 1.
 
 Each run is also logged on DATA/runs.jsonl, and --export FILE writes every
 find and run as one JSON file: the dashboard at https://amunka.hu/jogfigyelo/
-(web/index.html) loads it as data.json from beside itself, and deploy.sh
-uploads both.
+(web/index.html) loads it as data.json from beside itself. The latest finds
+go beside it as an RSS feed, feed.xml, and deploy.sh uploads all three.
 
   python3 jogfigyelo.py              check every source
   python3 jogfigyelo.py --dry-run    report, but remember nothing
-  python3 jogfigyelo.py --export F   write the dashboard's data file
+  python3 jogfigyelo.py --export F   write the dashboard's data file and feed
   python3 jogfigyelo.py --pdf FILE   score a downloaded Közlöny issue
 
 Needs Python 3.11+ and pdftotext (poppler).
@@ -49,6 +49,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils
+import zoneinfo
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -1009,7 +1011,119 @@ def export(data, out):
     now = dt.datetime.now(dt.timezone.utc).astimezone()
     doc = {"generated": now.isoformat(timespec="seconds"), "hits": rows, "runs": runs}
     out.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
-    print(f"{len(rows)} találat, {len(runs)} futás: {out}")
+    feed = out.with_name("feed.xml")
+    items = write_feed(rows, now, feed)
+    print(f"{len(rows)} találat, {len(runs)} futás: {out}; {items} tétel: {feed}")
+
+
+# --- RSS feed ---------------------------------------------------------------
+
+SITE = "https://amunka.hu/jogfigyelo/"
+FEED_ITEMS = 100
+BUDAPEST = zoneinfo.ZoneInfo("Europe/Budapest")
+HU_MONTHS = ("január", "február", "március", "április", "május", "június",
+             "július", "augusztus", "szeptember", "október", "november", "december")
+
+
+def hu_date(day):
+    y, m, d = (int(x) for x in day[:10].split("-"))
+    return f"{y}. {HU_MONTHS[m - 1]} {d}."
+
+
+def feed_entry(h):
+    """One find as an RSS item: title, link, categories, HTML description.
+
+    Says what the dashboard's entry says: the principle or headnote as the
+    body, then the decision; for a gazette act the sections it changes, the
+    amending text and the entry into force.
+    """
+    e = html.escape
+    k, ref = h["k"], h.get("ref", "")
+    body = []
+
+    def para(text, label=None):
+        if text:
+            body.append(f"<p><b>{e(label)}:</b> {e(text)}</p>" if label else f"<p>{e(text)}</p>")
+
+    def decision():
+        if h.get("outcome"):
+            label = (h.get("form") or "döntés").capitalize()
+            if len(h.get("decided", "")) == 10:
+                label += f", {hu_date(h['decided'])}"
+            para(h["outcome"], label)
+
+    if k == "kozlony":
+        title, link, tags = f"{ref} – {h.get('title', '')}", h.get("url"), ["Magyar Közlöny"]
+        if h.get("strong"):
+            tags.append("Erős jelzés")
+            body.append("<p><b>Erős jelzés</b></p>")
+        if h.get("topic"):
+            para(f'{h["topic"]["note"]} (súly {h["topic"]["weight"]})', "Tárgy")
+        changes = [(f'{c["statute"]} {c["section"]}. §' + (f' ({c["par"]})' if c.get("par") else "")
+                    if c.get("section") else f'{c["statute"]} (cím)')
+                   + (" szövegrész" if c.get("wording") else f' (súly {c["weight"]})')
+                   for c in h.get("changes", [])[:10]]
+        para(", ".join(changes), "Módosított szakaszok")
+        para(h.get("excerpt"))
+        para(h.get("effective"), "Hatálybalépés")
+        para(", ".join(x for x in (h.get("issue"), h.get("page") and f'{h["page"]}. oldal') if x))
+    elif k == "bhgy":
+        title, link, tags = f"{h.get('court', '')} {ref}".strip(), h.get("pdf"), [h.get("label") or "Bírósági határozat"]
+        para(h.get("summary"))
+        decision()
+    elif k == "kuria":
+        title = ref if h.get("kind") == "Sajtó" else f"Kúria {ref}"
+        link, tags = h.get("url"), ["Kúria"]
+        if h.get("title") != ref:
+            para(h.get("title"))
+        decision()
+    elif k == "kuria_bh":
+        title, link, tags = f"{ref}, {h.get('case', '')}".rstrip(", "), h.get("url"), ["Kúriai Döntések"]
+        para(h.get("title"))
+        decision()
+        para(", ".join(x for x in (h.get("issue"), h.get("section")) if x))
+    else:
+        title, link, tags = f"Alkotmánybíróság {ref}", h.get("url"), ["Alkotmánybíróság"]
+        para(h.get("kind"))
+        para(h.get("title"))
+        decision()
+    return title, link or SITE, tags, "".join(body)
+
+
+def write_feed(rows, now, path):
+    """Write the latest finds as an RSS 2.0 feed beside the dashboard.
+
+    Technical entries are left out, as the dashboard hides them by default.
+    An item is dated by its own day, the one the dashboard files it under.
+    """
+    x = xml.sax.saxutils.escape
+    rows = sorted((r for r in rows if not r.get("technical")),
+                  key=lambda r: (r["day"], r.get("found", "")), reverse=True)[:FEED_ITEMS]
+    items = []
+    for r in rows:
+        title, link, tags, desc = feed_entry(r)
+        day = dt.datetime.fromisoformat(r["day"]).replace(tzinfo=BUDAPEST)
+        items.append(
+            "<item>"
+            f"<title>{x(title)}</title><link>{x(link)}</link>"
+            f'<guid isPermaLink="false">{x(r["k"] + ":" + r["id"])}</guid>'
+            f"<pubDate>{email.utils.format_datetime(day)}</pubDate>"
+            + "".join(f"<category>{x(t)}</category>" for t in tags)
+            + f"<description>{x(desc)}</description>"
+            "</item>")
+    path.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>\n'
+        "<title>Jogfigyelő | a Munka</title>"
+        f"<link>{SITE}</link>"
+        f'<atom:link href="{SITE}feed.xml" rel="self" type="application/rss+xml"/>'
+        "<description>Új munkajogi jogszabályok és bírósági döntések a Magyar Közlönyből, a bíróságok "
+        "határozatgyűjteményéből, a Kúriától és az Alkotmánybíróságtól.</description>"
+        "<language>hu</language>"
+        f"<lastBuildDate>{email.utils.format_datetime(now)}</lastBuildDate>\n"
+        + "\n".join(items)
+        + "\n</channel></rss>\n", encoding="utf-8")
+    return len(items)
 
 
 def score_pdfs(paths, cfg, scorer, package):

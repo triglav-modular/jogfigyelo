@@ -1,7 +1,8 @@
 # Jogfigyelő
 
 Watches the official gazette and the courts for new labour-law material and
-publishes what it finds at **https://amunka.hu/jogfigyelo/**.
+publishes what it finds at **https://amunka.hu/jogfigyelo/**, with an RSS
+feed of the latest 100 finds at https://amunka.hu/jogfigyelo/feed.xml.
 
 | Source | What is reported |
 |---|---|
@@ -14,7 +15,7 @@ publishes what it finds at **https://amunka.hu/jogfigyelo/**.
 
 ```
 python3 jogfigyelo.py              # check every source, report what is new
-./deploy.sh --data                 # publish the updated data.json
+./deploy.sh --data                 # publish the updated data.json and feed.xml
 ```
 
 A run writes a Markdown report to `data/jelentesek/`, appends its finds to

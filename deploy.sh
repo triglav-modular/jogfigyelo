@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Publish the dashboard to https://amunka.hu/jogfigyelo/ over FTP.
 #
-#   ./deploy.sh            build the page, export data.json, upload both
-#   ./deploy.sh --data     export and upload data.json only (after a run)
+#   ./deploy.sh            build the page, export data.json and feed.xml, upload all
+#   ./deploy.sh --data     export and upload data.json and feed.xml only (after a run)
 #   ./deploy.sh --dry-run  build and export, then list what would be uploaded
 #
 # The page is rebuilt from the live site's chrome on every full deploy
@@ -34,7 +34,7 @@ python3 "$ROOT/jogfigyelo.py" --export "$ROOT/web/data.json"
 [ "${1:-}" = "--data" ] || python3 "$ROOT/build_page.py"
 
 case "${1:-}" in
-	--data) rclone copyto "$ROOT/web/data.json" "$REMOTE/data.json" ;;
+	--data) rclone copy "$ROOT/web" "$REMOTE" --include /data.json --include /feed.xml ;;
 	--dry-run) rclone copy "$ROOT/web" "$REMOTE" --exclude dashboard.html --dry-run ;;
 	"") rclone copy "$ROOT/web" "$REMOTE" --exclude dashboard.html ;;
 	*) echo "usage: $0 [--data|--dry-run]" >&2; exit 2 ;;
