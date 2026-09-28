@@ -116,7 +116,7 @@
 .jf .jf-summary { margin: 0; line-height: 1.5; overflow-wrap: anywhere; text-align: left; hyphens: manual; -webkit-hyphens: manual; }
 .jf-decision { font-family: "Rubik", sans-serif; font-size: 14px; line-height: 1.55; color: #4a4440; border-left: 3px solid var(--m_black); padding-left: 10px; margin-top: 2px; overflow-wrap: anywhere; }
 .jf-decision.main { font-size: 15px; color: var(--m_black); }
-.jf-decision b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--m_black); margin-right: 8px; }
+.jf-decision b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--m_red); margin-right: 8px; }
 .jf-refs a.jf-ref { text-decoration-thickness: 1px; }
 .jf-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
 .jf-pill { font-family: "Space Mono", monospace; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 7px; white-space: nowrap; }
@@ -416,8 +416,6 @@
     if (h.k === "ab") return "Alkotmánybíróság";
     return h.k;
   }
-  // A long text is shown clamped with a toggle; fitClamps() drops the toggle
-  // wherever the whole text fits after all, which only layout can tell.
   const meta = (...parts) => el("div", { class: "jf-meta" }, ...parts);
   const summaryBlock = text => [el("p", { class: "jf-summary", text })];
   function scorePill(h) {
