@@ -1,0 +1,182 @@
+# Jogfigyelő: what counts as labour-related, and where to look.
+#
+# Every Magyar Közlöny act (law, decree, resolution) is scored against the
+# patterns below. A pattern found in the act's title adds three times its
+# weight. Found only in the body, it adds its full weight once it occurs
+# `full_density` times per 1000 words, and proportionally less below that,
+# so an incidental mention in a long act counts for little. Patterns of
+# weight 10 or more count in full wherever they appear. Acts scoring
+# `min_score` or more are reported, and from `strong_score` they are marked
+# "erős". Kúria decisions and press releases are scored the same way.
+#
+# Patterns are Python regular expressions, matched case-insensitively against
+# text whose whitespace has been collapsed to single spaces. Words split by
+# a line-end hyphen in the PDF are rejoined, so write "munkaerő-?kölcsönz"
+# where the hyphen may or may not be part of the word.
+#
+# Test a change against a downloaded issue before relying on it:
+#   python3 tools/jogfigyelo/jogfigyelo.py --pdf MK_26_138.pdf
+
+min_score = 5
+strong_score = 10
+full_density = 2
+
+# Constitutional Court subjects are one or two lines, so a single labour
+# term there means more than it does in a fifty-page decree.
+ab_min_score = 3
+
+# With no state yet, report only what appeared in the last this-many days
+# and remember the rest as already seen.
+first_run_days = 14
+
+# Which of the gazette's publications to read. The feed also carries
+# "Hivatalos Értesítő" and "Indokolások Tára".
+kozlony_types = ["Magyar Közlöny"]
+
+# Közlöny acts never reported, matched against the act's id. Presidential
+# and prime-ministerial resolutions are appointments, dismissals and ranks.
+skip_acts = ['KE határozat$', 'ME határozat$']
+
+# Anonymized court decisions (eakta.birosag.hu). Every decision a query
+# returns is reported; the fields are the site's own search parameters.
+[[bhgy]]
+label = "Munkaügyi kollégium"
+Kollegium = "munkaügyi"
+
+[[bhgy]]
+label = "Közszolgálati jogviták"
+Kollegium = "közigazgatási"
+KeresoSzo = "közszolgálati jogvita"
+KeresoSzoOperator = "Kifejezes"
+
+# --- Közlöny and Constitutional Court patterns --------------------------
+
+[[pattern]]
+name = "munkajogi törvény módosítása"
+weight = 10
+re = '''(?:munka törvénykönyvéről|közalkalmazottak jogállásáról|közszolgálati tisztviselőkről|munkavédelemről|munkaügyi ellenőrzésről|foglalkoztatás elősegítéséről|egyszerűsített foglalkoztatásról|közfoglalkoztatásról|sztrájkról|pedagógusok új életpályájáról|egészségügyi szolgálati jogviszonyról|nemzeti gazdasági és társadalmi tanácsról)[^.;]{0,80}?(?:törvény|rendelet)[^.;]{0,20}?módosítás'''
+
+[[pattern]]
+name = "munkaügyi per"
+weight = 5
+re = '\bMfv?\.|munkaügyi (?:per|jogvita|kollégium|szakág|bíróság)|közszolgálati jogvita'
+
+[[pattern]]
+name = "Munka Törvénykönyve"
+weight = 5
+re = 'munka törvénykönyv'
+
+[[pattern]]
+name = "minimálbér"
+weight = 5
+re = 'minimálbér|legkisebb munkabér|garantált bérminimum'
+
+[[pattern]]
+name = "szakszervezet, sztrájk, kollektív szerződés"
+weight = 5
+re = 'szakszervezet|üzemi tanács|üzemi megbízott|kollektív szerződés|munkavállalói érdekképviselet|sztrájk'
+
+[[pattern]]
+name = "érdekegyeztetés"
+weight = 5
+re = 'érdekegyeztet|nemzeti gazdasági és társadalmi tanács|állandó konzultációs fórum'
+
+[[pattern]]
+name = "munkavédelem"
+weight = 5
+re = 'munkavédelm|munkabiztonság|munkabaleset|foglalkozási megbetegedés|foglalkozás-?egészségügy'
+
+[[pattern]]
+name = "munkaügyi ellenőrzés"
+weight = 5
+re = 'munkaügyi ellenőrzés|munkaügyi hatóság|foglalkoztatás-?felügyelet'
+
+[[pattern]]
+name = "foglalkoztatáspolitika, munkanélküliség"
+weight = 5
+re = 'foglalkoztatás elősegítés|álláskeres|munkanélküli|közfoglalkoztat|egyszerűsített foglalkoztatás|alkalmi munka'
+
+[[pattern]]
+name = "munkaerő-kölcsönzés, vendégmunka"
+weight = 5
+re = 'munkaerő-?kölcsönz|vendég-?munkás|foglalkoztatási engedély|harmadik országbeli munkavállaló'
+
+[[pattern]]
+name = "munkaszüneti napok"
+weight = 5
+re = 'munkaszüneti nap|munkanap-?áthelyezés'
+
+[[pattern]]
+name = "közszolgálati jogállás"
+weight = 3
+re = 'közalkalmazott|közszolgálati tisztviselő|kormánytisztviselő|köztisztviselő|közszolgálati jogviszony|kormányzati szolgálati jogviszony'
+
+[[pattern]]
+name = "ágazati életpálya, szolgálati jogviszony"
+weight = 3
+re = 'pedagógusok új életpály|egészségügyi szolgálati jogviszony|szolgálati jogviszony|honvédek jogállás|hivatásos állomány'
+
+[[pattern]]
+name = "bér, illetmény, pótlék"
+weight = 3
+re = 'bérpótlék|műszakpótlék|béremelés|bérfejlesztés|bérrendezés|illetményemel|bérkompenzáció|illetménytábla|bértábla'
+
+[[pattern]]
+name = "szabadság"
+weight = 3
+re = 'pótszabadság|betegszabadság|fizetés nélküli szabadság|rendes szabadság|szülési szabadság|apasági szabadság|szülői szabadság'
+
+[[pattern]]
+name = "megváltozott munkaképesség"
+weight = 3
+re = 'megváltozott munkaképesség|rehabilitációs (?:ellátás|hozzájárulás)'
+
+[[pattern]]
+name = "munkaidő, pihenőidő"
+weight = 2
+re = 'munkaidő|pihenőidő|rendkívüli munkavégzés|túlóra|műszak(?!i)'
+
+[[pattern]]
+name = "felmondás, végkielégítés"
+weight = 2
+re = 'felmondás|végkielégítés|munkaviszony megszün'
+
+[[pattern]]
+name = "munkabér"
+weight = 2
+re = 'munkabér'
+
+[[pattern]]
+name = "munkavállaló"
+weight = 1
+re = 'munkavállaló'
+
+[[pattern]]
+name = "munkáltató"
+weight = 1
+re = 'munkáltató'
+
+[[pattern]]
+name = "munkaviszony"
+weight = 1
+re = 'munkaviszony'
+
+[[pattern]]
+name = "foglalkoztatás"
+weight = 1
+re = 'foglalkoztat'
+
+[[pattern]]
+name = "illetmény"
+weight = 1
+re = 'illetmény'
+
+[[pattern]]
+name = "dolgozó"
+weight = 1
+re = '\bdolgozó'
+
+[[pattern]]
+name = "nyugdíj"
+weight = 1
+re = 'nyugdíj'
