@@ -1,0 +1,15 @@
+# amunka.hu/jogfigyelo: a static page outside Grav. The site root's rewrite
+# rules serve existing folders and files directly, so Grav never sees these.
+
+AddDefaultCharset utf-8
+AddType application/json .json
+
+# The page and its data change with every run of the watcher. Without a
+# Cache-Control header the browser guesses a lifetime from Last-Modified and
+# shows yesterday's findings; no-cache keeps the copy but revalidates it, so
+# an unchanged file costs a 304.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|json)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

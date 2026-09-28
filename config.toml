@@ -15,7 +15,7 @@
 # where the hyphen may or may not be part of the word.
 #
 # Test a change against a downloaded issue before relying on it:
-#   python3 tools/jogfigyelo/jogfigyelo.py --pdf MK_26_138.pdf
+#   python3 jogfigyelo.py --pdf MK_26_138.pdf
 
 min_score = 5
 strong_score = 10

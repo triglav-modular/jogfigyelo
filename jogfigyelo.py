@@ -20,16 +20,15 @@ onto DATA/talalatok.jsonl; DATA/state.json remembers what has been seen. A
 source that fails is not marked as seen, so the next run retries it, and the
 run exits 1.
 
-Each run is also logged on DATA/runs.jsonl, and --export writes what was
-found since the last export as dashboard batch documents (JSON). The
-dashboard, https://claude.ai/artifact/Rp9fWZgzj7q362do8GrbPc, reads them
-from its database's "batches" collection, one document per file, doc id =
-file name without ".json"; Claude writes them there (ArtifactData, "set").
+Each run is also logged on DATA/runs.jsonl, and --export FILE writes every
+find and run as one JSON file: the dashboard at https://amunka.hu/jogfigyelo/
+(web/index.html) loads it as data.json from beside itself, and deploy.sh
+uploads both.
 
-  tools/jogfigyelo/jogfigyelo.py              check every source
-  tools/jogfigyelo/jogfigyelo.py --dry-run    report, but remember nothing
-  tools/jogfigyelo/jogfigyelo.py --export DIR write new finds as batch docs
-  tools/jogfigyelo/jogfigyelo.py --pdf FILE   score a downloaded Közlöny issue
+  python3 jogfigyelo.py              check every source
+  python3 jogfigyelo.py --dry-run    report, but remember nothing
+  python3 jogfigyelo.py --export F   write the dashboard's data file
+  python3 jogfigyelo.py --pdf FILE   score a downloaded Közlöny issue
 
 Needs Python 3.11+ and pdftotext (poppler).
 """
@@ -721,22 +720,16 @@ DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "
 
 
 def export(data, out):
-    """Write finds and runs logged since the last export as batch documents.
+    """Write every find and run on record as the dashboard's data file.
 
-    Each document stays well under the dashboard database's 256 KiB limit;
-    the page merges every batch and drops repeats by source and id.
+    Rebuilt whole each time from talalatok.jsonl and runs.jsonl, so it is
+    always complete; where a find was logged twice, the later record wins.
     """
-    state = load_json(data / "state.json", {"seen": {}})
-    after = dt.datetime.fromisoformat(state.get("exported", "1970-01-01T00:00:00+00:00"))
-    is_new = lambda stamp: dt.datetime.fromisoformat(stamp) > after
-    hits = [h for h in read_jsonl(data / "talalatok.jsonl") if is_new(h["found"])]
-    runs = [r for r in read_jsonl(data / "runs.jsonl") if is_new(r["at"])]
-    if not hits and not runs:
-        print("Nincs mit exportálni.")
-        return
-    now = dt.datetime.now(dt.timezone.utc).astimezone()
-    docs, cur, size = [], [], 0
-    for h in hits:
+    latest = {}
+    for h in read_jsonl(data / "talalatok.jsonl"):
+        latest[(h["source"], h["id"])] = h
+    rows = []
+    for h in latest.values():
         row = {"k": h["source"], "id": h["id"],
                "day": h["date"] if len(h.get("date", "")) == 10 else h["found"][:10]}
         row.update({f: h[f] for f in DASHBOARD_FIELDS if h.get(f) not in (None, "", [])})
@@ -744,23 +737,12 @@ def export(data, out):
             row["summary"] = clip(row["summary"], 900)
         if h.get("terms"):
             row["terms"] = h["terms"][:5]
-        n = len(json.dumps(row, ensure_ascii=False).encode())
-        if cur and size + n > 180_000:
-            docs.append(cur)
-            cur, size = [], 0
-        cur.append(row)
-        size += n
-    docs.append(cur)
-    out.mkdir(parents=True, exist_ok=True)
-    for i, chunk in enumerate(docs):
-        doc = {"at": now.isoformat(timespec="seconds"), "hits": chunk}
-        if i == 0:
-            doc["runs"] = runs
-        path = out / f"{now:%Y%m%dT%H%M%S}-{i}.json"
-        path.write_text(json.dumps(doc, ensure_ascii=False))
-        print(path)
-    state["exported"] = max([h["found"] for h in hits] + [r["at"] for r in runs])
-    write_atomic(data / "state.json", json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True))
+        rows.append(row)
+    runs = read_jsonl(data / "runs.jsonl")
+    now = dt.datetime.now(dt.timezone.utc).astimezone()
+    doc = {"generated": now.isoformat(timespec="seconds"), "hits": rows, "runs": runs}
+    out.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+    print(f"{len(rows)} találat, {len(runs)} futás: {out}")
 
 
 def score_pdfs(paths, cfg, scorer):
@@ -783,7 +765,7 @@ def main():
     ap.add_argument("--since", type=int, metavar="DAYS", help="ignore anything unseen that is older than this")
     ap.add_argument("--dry-run", action="store_true", help="print the report, write nothing")
     ap.add_argument("--pdf", type=Path, nargs="+", metavar="FILE", help="score downloaded Közlöny issues and exit")
-    ap.add_argument("--export", type=Path, metavar="DIR", help="write finds since the last export as dashboard batch documents and exit")
+    ap.add_argument("--export", type=Path, metavar="FILE", help="write every find and run as the dashboard's data file and exit")
     args = ap.parse_args()
     if args.export:
         export(args.data, args.export)
