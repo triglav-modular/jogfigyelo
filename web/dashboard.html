@@ -129,7 +129,7 @@
 .jf-change.hot { background: var(--m_yellow); }
 .jf-change.wording { border-color: #cfc8c1; color: #6e6660; font-weight: 400; }
 .jf-change small { font-weight: 400; margin-left: 4px; }
-.jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
+.jf .jf-summary.jf-excerpt, .jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
 .jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
 .jf-outcome-label { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--m_red); }
 .jf .jf-outcome { margin: 0; font-weight: 500; }
@@ -448,12 +448,13 @@
 
   function marked(text, marks) {
     // Highlight the spans the watcher matched; everything stays text nodes.
-    const p = el("p", { class: "jf-excerpt" });
+    // Clamped like the other long texts: a quoted new section can be long.
+    const [p, btn] = clamped("", "jf-excerpt", "Teljes szöveg");
     let at = 0;
     (Array.isArray(marks) ? marks : []).filter(m => Array.isArray(m) && m[0] >= at && m[1] <= text.length && m[1] > m[0])
       .forEach(([a, b]) => { p.append(text.slice(at, a), el("mark", { text: text.slice(a, b) })); at = b; });
     p.append(text.slice(at));
-    return p;
+    return [p, btn];
   }
 
   function decisionBlock(h, principle) {
@@ -490,7 +491,7 @@
       if (changes.length) kids.push(el("div", { class: "jf-changes", "aria-label": "Módosított szakaszok" }, changes.slice(0, 10).map(c =>
         el("span", { class: "jf-change" + (c.wording ? " wording" : c.weight >= 8 ? " hot" : ""),
           title: c.wording ? "csak szövegrész változik" : `súly ${c.weight}` }, where(c), el("small", { text: c.wording ? "szövegrész" : `súly ${c.weight}` })))));
-      if (h.excerpt) kids.push(marked(h.excerpt, h.marks));
+      if (h.excerpt) kids.push(...marked(h.excerpt, h.marks));
       kids.push(el("div", { class: "jf-meta" }, h.effective ? el("span", { text: `Hatálybalépés: ${h.effective}` }) : null,
         link(h.issue || "Közlöny", h.url), link("PDF", h.pdf)));
     } else if (h.k === "bhgy") {

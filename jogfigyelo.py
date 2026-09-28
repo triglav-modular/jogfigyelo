@@ -338,14 +338,14 @@ class Package:
                 new = ""
                 if end and body[end.start()] == ":":
                     q = re.match(r"\s*„(.*?)”", body[end.end():end.end() + 3000], re.S)
-                    new = clip(q.group(1), 420) if q else ""
+                    new = q.group(1) if q else ""
                 wording = "szövegrész" in clause and not re.search(r"helyébe a következő|egészül ki", clause)
                 sections = [ref.group(1)] + re.findall(self.SECTION, body[m.end() + ref.end():stop])
                 for i, sec in enumerate(dict.fromkeys(sections)):
                     key = (st["short"], sec, ref.group(2) if i == 0 else None)
                     if key not in found:
                         found[key] = {"statute": st["short"], "section": sec, "par": key[2], "weight": self.weight(st, sec),
-                                      "wording": wording, "clause": clip(clause, 420), "new": new}
+                                      "wording": wording, "clause": clause, "new": new}
             # An act titled as amending the statute counts even where its
             # provisions escape the pattern above.
             if not any(k[0] == st["short"] for k in found) and re.search(re.escape(st["name"]) + r"\s+szóló[^.]{0,80}?módosításáról", act["title"]):
@@ -491,7 +491,7 @@ def decision_parts(text):
         if month.lower() in HU_MONTHS:
             decided = f"{y}-{HU_MONTHS.index(month.lower()) + 1:02d}-{int(d):02d}"
             break
-    return {"form": form, "decided": decided, "outcome": clip(squash(out), 1500)}
+    return {"form": form, "decided": decided, "outcome": squash(out)}
 
 
 def technical_order(cfg, form, ref, outcome):
@@ -602,7 +602,7 @@ def kuria_item(url):
 
 def kuria_outcome(text):
     m = re.search(r"(?:Rendelkező rész|jogegységi határozatot:|határozatot:|végzést:)\s*(.*?)\s*Indokolás\b", text)
-    return clip(m.group(1), 1500) if m else ""
+    return m.group(1) if m else ""
 
 
 def check_kuria_lists(cfg, scorer, seen, cutoff):
@@ -637,7 +637,7 @@ def check_kuria_lists(cfg, scorer, seen, cutoff):
                     "date": date.isoformat() if date else "",
                     "kind": "Sajtó" if prefix == "/hu/sajto/" else "Jogegységi eljárás",
                     "ref": title,
-                    "title": clip(subject, 400),
+                    "title": subject,
                     "url": url,
                     "score": score,
                     "strong": score >= cfg["strong_score"],
@@ -731,7 +731,7 @@ def journal_decisions(pages):
         last = re.split(r"\n\s*\[\d+\]\s*", chunk)[-1]
         verdict = squash(last) if re.search(r"hatályában fenntart|hatályon kívül|helybenhagy|megváltoztat|elutasít|megsemmisít", last) else ""
         if serial:
-            out.append((section, int(serial.group(1)), squash(head), value, clip(verdict, 900)))
+            out.append((section, int(serial.group(1)), squash(head), value, verdict))
     # Serials run on through the year; a number far off the issue's run is
     # a page number or paragraph caught next to a citation.
     if out:
@@ -787,7 +787,7 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
                 "case": ref,
                 "section": section.capitalize(),
                 "outcome": verdict,
-                "title": clip(head),
+                "title": head,
                 "terms": terms,
             })
         marked[url] = f"{year}-{m.group(2)}" if m else ""
@@ -1002,8 +1002,6 @@ def export(data, out):
         row = {"k": h["source"], "id": h["id"],
                "day": h["date"] if len(h.get("date", "")) == 10 else h["found"][:10]}
         row.update({f: h[f] for f in DASHBOARD_FIELDS if h.get(f) not in (None, "", [])})
-        if "summary" in row:
-            row["summary"] = clip(row["summary"], 900)
         if h.get("terms"):
             row["terms"] = h["terms"][:5]
         rows.append(row)
