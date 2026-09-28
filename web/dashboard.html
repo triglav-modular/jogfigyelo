@@ -418,17 +418,26 @@
     if (h.k === "ab") return "Alkotmánybíróság";
     return h.k;
   }
-  function summaryBlock(text) {
-    const p = el("p", { class: "jf-summary clamp", text });
-    if (text.length < 300) { p.classList.remove("clamp"); return [p]; }
-    const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: "Teljes szöveg" });
+  // A long text is shown clamped with a toggle; fitClamps() drops the toggle
+  // wherever the whole text fits after all, which only layout can tell.
+  function clamped(text, cls, more) {
+    const p = el("p", { class: `jf-summary ${cls || ""} clamp`.replace(/\s+/g, " "), text });
+    const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: more });
     btn.addEventListener("click", () => {
-      const clamped = p.classList.toggle("clamp");
-      btn.setAttribute("aria-expanded", String(!clamped));
-      btn.textContent = clamped ? "Teljes szöveg" : "Kevesebb";
+      const isClamped = p.classList.toggle("clamp");
+      btn.setAttribute("aria-expanded", String(!isClamped));
+      btn.textContent = isClamped ? more : "Kevesebb";
     });
     return [p, btn];
   }
+  function fitClamps(root) {
+    root.querySelectorAll("p.clamp").forEach(p => {
+      const btn = p.nextElementSibling && p.nextElementSibling.classList.contains("jf-more") ? p.nextElementSibling : null;
+      if (p.scrollHeight - p.clientHeight <= 2) { p.classList.remove("clamp"); if (btn) btn.hidden = true; }
+      else if (btn) btn.hidden = false;
+    });
+  }
+  const summaryBlock = text => clamped(text, "", "Teljes szöveg");
   function scorePill(h) {
     if (h.score == null) return null;
     return el("span", { class: "jf-pill " + (h.strong ? "strong" : "maybe"), title: `Kulcsszó-pontszám: ${h.score}`, text: `${h.strong ? "erős" : "lehetséges"} · ${h.score}` });
@@ -454,17 +463,7 @@
       const label = [h.form ? h.form.charAt(0).toUpperCase() + h.form.slice(1) : "Döntés",
         h.decided && parseDay(h.decided) ? `kelt ${short(parseDay(h.decided))}` : null].filter(Boolean).join(" · ");
       out.push(el("div", { class: "jf-outcome-label", text: label }));
-      const p = el("p", { class: "jf-summary jf-outcome" + (h.outcome.length > 300 ? " clamp" : ""), text: h.outcome });
-      out.push(p);
-      if (h.outcome.length > 300) {
-        const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: "Teljes rendelkező rész" });
-        btn.addEventListener("click", () => {
-          const clamped = p.classList.toggle("clamp");
-          btn.setAttribute("aria-expanded", String(!clamped));
-          btn.textContent = clamped ? "Teljes rendelkező rész" : "Kevesebb";
-        });
-        out.push(btn);
-      }
+      out.push(...clamped(h.outcome, "jf-outcome", "Teljes rendelkező rész"));
     }
     if (principle) {
       if (h.outcome) out.push(el("details", { class: "jf-principle" }, el("summary", { text: "Elvi tartalom" }), el("p", { text: principle })));
@@ -555,6 +554,7 @@
         text: `További ${Math.min(PAGE, groups.length - ui.shown)} bejegyzés` }));
     }
     feed.replaceChildren(...out);
+    requestAnimationFrame(() => fitClamps(feed));
   }
 
   function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
@@ -568,6 +568,21 @@
   $("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { ui.q = e.target.value; ui.shown = PAGE; renderFeed(); }, 150); });
 
   render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitClamps($("feed")));
+  let lastWidth = window.innerWidth, resizeTimer = null;
+  window.addEventListener("resize", () => {
+    if (window.innerWidth === lastWidth) return;
+    lastWidth = window.innerWidth;
+    clearTimeout(resizeTimer);
+    // Re-clamp everything collapsed, then keep toggles only where text is cut off.
+    resizeTimer = setTimeout(() => {
+      $("feed").querySelectorAll("p.jf-summary").forEach(p => {
+        const btn = p.nextElementSibling && p.nextElementSibling.classList.contains("jf-more") ? p.nextElementSibling : null;
+        if (btn && btn.getAttribute("aria-expanded") !== "true") p.classList.add("clamp");
+      });
+      fitClamps($("feed"));
+    }, 200);
+  });
 
   // data.json sits beside this page and is rewritten after every run.
   fetch("data.json", { cache: "no-cache" })

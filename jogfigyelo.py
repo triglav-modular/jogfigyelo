@@ -273,7 +273,7 @@ def act_excerpt(act, scorer, most=2):
 def act_effective(act):
     """The closing provision on entry into force, as the act words it."""
     m = re.search(r"[^.]*\blép(?:nek)? hatályba\b[^.]*\.", act["body"])
-    return clip(re.sub(r"^\s*\d+\. §\s*", "", m.group(0)).strip(), 240) if m else ""
+    return clip(re.sub(r"^\s*(?:\d+\.\s*)?§\s*(?:\(\d+\)\s*)?", "", m.group(0)).strip(), 240) if m else ""
 
 
 # An amending act is technical when every change it makes is to wording:
@@ -332,7 +332,7 @@ class Package:
                 start = max(body.rfind(". ", 0, m.start()), body.rfind(": ", 0, m.start()), body.rfind("” ", 0, m.start()), 0)
                 end = re.compile(r":|\.\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ„\d])").search(body, m.end() + ref.end())
                 stop = end.start() if end else min(len(body), m.end() + 400)
-                clause = body[start:stop + 1].lstrip(". :”")
+                clause = re.sub(r"^[.:”\s]*(?:\d+\.\s*)?§\s*(?:\(\d+\)\s*)?", "", body[start:stop + 1]).lstrip(". :”")
                 if not self.AMENDS.search(clause) or self.LEGAL_BASIS.search(clause):
                     continue  # a mere reference, or the legal basis of a decree
                 new = ""
