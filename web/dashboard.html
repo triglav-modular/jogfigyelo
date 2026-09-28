@@ -133,8 +133,8 @@
 .jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
 .jf-outcome-label { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--m_red); }
 .jf .jf-outcome { margin: 0; font-weight: 500; }
-.jf-principle summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; width: max-content; }
-.jf-principle p { margin: 6px 0 0; color: var(--m_black_text); font-size: 0.95em; }
+.jf .jf-outcome.secondary { font-weight: 400; font-size: 0.92em; color: var(--m_black_text); }
+.jf .jf-summary.secondary.clamp { -webkit-line-clamp: 2; }
 .jf-item.is-tech { opacity: 0.75; }
 .jf-loadmore { justify-self: start; }
 .jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
@@ -458,17 +458,15 @@
   }
 
   function decisionBlock(h, principle) {
-    // What was decided comes first; the principle is there for whoever wants it.
+    // The principle is the body text; the decision follows it, smaller and
+    // folded to two lines. Without a principle the decision is the body.
     const out = [];
+    if (principle) out.push(...summaryBlock(principle));
     if (h.outcome) {
       const label = [h.form ? h.form.charAt(0).toUpperCase() + h.form.slice(1) : "Döntés",
         h.decided && parseDay(h.decided) ? `kelt ${short(parseDay(h.decided))}` : null].filter(Boolean).join(" · ");
       out.push(el("div", { class: "jf-outcome-label", text: label }));
-      out.push(...clamped(h.outcome, "jf-outcome", "Teljes rendelkező rész"));
-    }
-    if (principle) {
-      if (h.outcome) out.push(el("details", { class: "jf-principle" }, el("summary", { text: "Elvi tartalom" }), el("p", { text: principle })));
-      else out.push(...summaryBlock(principle));
+      out.push(...clamped(h.outcome, principle ? "jf-outcome secondary" : "jf-outcome", "Teljes rendelkező rész"));
     }
     return out;
   }
