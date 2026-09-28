@@ -114,14 +114,10 @@
 .jf-court { font-family: "Rubik", sans-serif; font-weight: 600; font-size: 15px; }
 .jf .jf-title { margin: 0; font-size: 1.12em; line-height: 1.4; text-align: left; hyphens: manual; }
 .jf .jf-summary { margin: 0; line-height: 1.5; overflow-wrap: anywhere; text-align: left; hyphens: manual; -webkit-hyphens: manual; }
-.jf .fold.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .jf-decision { font-family: "Rubik", sans-serif; font-size: 14px; line-height: 1.55; color: #4a4440; border-left: 3px solid var(--m_black); padding-left: 10px; margin-top: 2px; overflow-wrap: anywhere; }
 .jf-decision.main { font-size: 15px; color: var(--m_black); }
-.jf .jf-decision.fold.clamp { -webkit-line-clamp: 2; }
-.jf .jf-decision.main.fold.clamp { -webkit-line-clamp: 4; }
 .jf-decision b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--m_black); margin-right: 8px; }
 .jf-refs a.jf-ref { text-decoration-thickness: 1px; }
-.jf-more { font-family: "Space Mono", monospace; font-size: 12px; color: var(--m_black_text); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; justify-self: start; }
 .jf-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
 .jf-pill { font-family: "Space Mono", monospace; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 7px; white-space: nowrap; }
 .jf-pill.strong { background: var(--m_yellow); color: var(--m_black); }
@@ -422,31 +418,8 @@
   }
   // A long text is shown clamped with a toggle; fitClamps() drops the toggle
   // wherever the whole text fits after all, which only layout can tell.
-  // Long texts are folded. Each item has one toggle, shown only where layout
-  // says something is actually cut off.
-  function fitItem(item) {
-    const btn = item.querySelector(".jf-more");
-    if (!btn || btn.getAttribute("aria-expanded") === "true") return;
-    let cut = false;
-    item.querySelectorAll(".fold").forEach(f => {
-      f.classList.add("clamp");
-      if (f.scrollHeight - f.clientHeight > 2) cut = true; else f.classList.remove("clamp");
-    });
-    btn.hidden = !cut;
-  }
-  const fitClamps = root => root.querySelectorAll(".jf-item").forEach(fitItem);
-  function moreButton() {
-    return el("button", { type: "button", class: "jf-more", hidden: true, "aria-expanded": "false", text: "Tovább",
-      onclick: e => {
-        const btn = e.currentTarget, item = btn.closest(".jf-item"), open = btn.getAttribute("aria-expanded") !== "true";
-        btn.setAttribute("aria-expanded", String(open));
-        btn.textContent = open ? "Kevesebb" : "Tovább";
-        if (open) item.querySelectorAll(".fold").forEach(f => f.classList.remove("clamp"));
-        else fitItem(item);
-      } });
-  }
-  const meta = (...parts) => el("div", { class: "jf-meta" }, moreButton(), ...parts);
-  const summaryBlock = text => [el("p", { class: "jf-summary fold clamp", text })];
+  const meta = (...parts) => el("div", { class: "jf-meta" }, ...parts);
+  const summaryBlock = text => [el("p", { class: "jf-summary", text })];
   function scorePill(h) {
     if (h.score == null) return null;
     return el("span", { class: "jf-pill " + (h.strong ? "strong" : "maybe"), title: `Kulcsszó-pontszám: ${h.score}`, text: `${h.strong ? "erős" : "lehetséges"} · ${h.score}` });
@@ -457,7 +430,7 @@
 
   function marked(text, marks) {
     // Highlight the spans the watcher matched; everything stays text nodes.
-    const p = el("p", { class: "jf-summary jf-excerpt fold clamp" });
+    const p = el("p", { class: "jf-summary jf-excerpt" });
     let at = 0;
     (Array.isArray(marks) ? marks : []).filter(m => Array.isArray(m) && m[0] >= at && m[1] <= text.length && m[1] > m[0])
       .forEach(([a, b]) => { p.append(text.slice(at, a), el("mark", { text: text.slice(a, b) })); at = b; });
@@ -472,7 +445,7 @@
     if (principle) out.push(...summaryBlock(principle));
     if (h.outcome) {
       const label = [h.form || "döntés", h.decided && parseDay(h.decided) ? short(parseDay(h.decided)) : null].filter(Boolean).join(" · ");
-      out.push(el("div", { class: "jf-decision fold clamp" + (principle ? "" : " main") }, el("b", { text: label }), h.outcome));
+      out.push(el("div", { class: "jf-decision" + (principle ? "" : " main") }, el("b", { text: label }), h.outcome));
     }
     return out;
   }
@@ -560,7 +533,6 @@
         text: `További ${Math.min(PAGE, groups.length - ui.shown)} bejegyzés` }));
     }
     feed.replaceChildren(...out);
-    requestAnimationFrame(() => fitClamps(feed));
   }
 
   function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
@@ -574,15 +546,6 @@
   $("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { ui.q = e.target.value; ui.shown = PAGE; renderFeed(); }, 150); });
 
   render();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitClamps($("feed")));
-  let lastWidth = window.innerWidth, resizeTimer = null;
-  window.addEventListener("resize", () => {
-    if (window.innerWidth === lastWidth) return;
-    lastWidth = window.innerWidth;
-    clearTimeout(resizeTimer);
-    // Re-clamp everything collapsed, then keep toggles only where text is cut off.
-    resizeTimer = setTimeout(() => fitClamps($("feed")), 200);
-  });
 
   // data.json sits beside this page and is rewritten after every run.
   fetch("data.json", { cache: "no-cache" })
