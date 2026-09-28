@@ -122,6 +122,20 @@
 .jf-pill.maybe { box-shadow: inset 0 0 0 2px #cfc8c1; color: var(--m_black_text); }
 .jf-pill.new { background: var(--m_red); color: #fff; }
 .jf-empty { margin: 0; padding: 20px 0; }
+.jf-pill.tech { box-shadow: inset 0 0 0 2px #cfc8c1; color: #6e6660; }
+.jf-pill.alert { background: var(--m_red); color: #fff; }
+.jf-changes { display: flex; flex-wrap: wrap; gap: 6px; }
+.jf-change { font-family: "Space Mono", monospace; font-size: 12px; font-weight: 700; padding: 2px 7px; border: 2px solid var(--m_black); white-space: nowrap; }
+.jf-change.hot { background: var(--m_yellow); }
+.jf-change.wording { border-color: #cfc8c1; color: #6e6660; font-weight: 400; }
+.jf-change small { font-weight: 400; margin-left: 4px; }
+.jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
+.jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
+.jf-outcome-label { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--m_red); }
+.jf .jf-outcome { margin: 0; font-weight: 500; }
+.jf-principle summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; width: max-content; }
+.jf-principle p { margin: 6px 0 0; color: var(--m_black_text); font-size: 0.95em; }
+.jf-item.is-tech { opacity: 0.75; }
 .jf-loadmore { justify-self: start; }
 .jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
 </style>
@@ -161,6 +175,7 @@
               </div>
               <div class="jf-chips" id="sources" role="group" aria-label="Források"></div>
               <button type="button" class="jf-btn" id="onlyNew" aria-pressed="false"><span class="jf-dot" aria-hidden="true"></span>Csak az újak <span class="n" id="newCount">0</span></button>
+              <button type="button" class="jf-btn" id="showTech" aria-pressed="false" title="Csak szövegcserés jogszabály-módosítások és eljárási végzések">Technikai tételek is <span class="n" id="techCount">0</span></button>
               <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
             </div>
 
@@ -175,7 +190,7 @@
               <div id="feed"><p class="jf-empty">Betöltés…</p></div>
             </section>
 
-            <p class="jf-foot">A Közlöny aktusait a figyelő kulcsszavak sűrűsége alapján pontozza; az „erős” jelölés ezt a pontszámot mutatja, nem jogi értékelést. A munkaügyi kollégium minden új határozata megjelenik.</p>
+            <p class="jf-foot">A Közlönyből azok a jogszabályok jelennek meg, amelyek az alap munkajogi törvénycsomag valamely törvényét módosítják (a szakaszok súlya szerint), vagy amelyek címe munkajogi tárgyú. A munkaügyi kollégium minden új határozata megjelenik. A technikai tételek (csak szövegcsere, eljárási végzés) alapból rejtve vannak.</p>
           </div>
         </div>
       </div>
@@ -213,7 +228,8 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") markSeen(); });
   window.addEventListener("pagehide", markSeen);
 
-  const ui = { days: Number(store.get("jf.days") || 30), groups: new Set(GROUPS.map(g => g.key)), onlyNew: false, q: "", shown: PAGE };
+  const ui = { days: Number(store.get("jf.days") || 30), groups: new Set(GROUPS.map(g => g.key)), onlyNew: false,
+    showTech: store.get("jf.tech") === "1", q: "", shown: PAGE };
   if (![0, 7, 30, 90].includes(ui.days)) ui.days = 30;
   try {
     const saved = JSON.parse(store.get("jf.groups") || "null");
@@ -263,7 +279,8 @@
         const d = parseDay(h.day);
         if (!d) return;
         byKey.set(h.k + "|" + h.id, Object.assign({}, h, { _d: d, _g: GROUP_OF[h.k] || "other",
-          _text: fold([h.ref, h.title, h.summary, h.court, h.label, h.issue, h.kind, h.section, h.case].filter(Boolean).join(" ")) }));
+          _text: fold([h.ref, h.title, h.summary, h.outcome, h.excerpt, h.court, h.label, h.issue, h.kind, h.section, h.case,
+            (h.changes || []).map(c => `${c.statute} ${c.section || ""}`).join(" ")].filter(Boolean).join(" ")) }));
       });
       (Array.isArray(doc.runs) ? doc.runs : []).forEach(r => { if (r && r.at) allRuns.push(r); });
     });
@@ -282,6 +299,7 @@
   }
 
   const inRange = (h, from, to) => h._d >= from && h._d < to;
+  const visible = h => ui.showTech || !h.technical;
   function rangeBounds(days) {
     const end = addDays(startOfDay(new Date()), 1);
     return days ? [addDays(end, -days), end] : [new Date(0), end];
@@ -310,7 +328,7 @@
     const box = $("sources"); box.replaceChildren();
     const [from, to] = rangeBounds(ui.days);
     GROUPS.forEach(g => {
-      const n = hits.filter(h => h._g === g.key && inRange(h, from, to)).length;
+      const n = hits.filter(h => h._g === g.key && visible(h) && inRange(h, from, to)).length;
       box.append(el("button", {
         type: "button", class: "jf-btn", "aria-pressed": String(ui.groups.has(g.key)),
         onclick: () => {
@@ -320,7 +338,9 @@
         },
       }, g.name, el("span", { class: "n", text: String(n) })));
     });
-    const newN = hits.filter(isNew).length;
+    const newN = hits.filter(h => visible(h) && isNew(h)).length;
+    $("techCount").textContent = String(hits.filter(h => h.technical && inRange(h, from, to)).length);
+    $("showTech").setAttribute("aria-pressed", String(ui.showTech));
     $("newCount").textContent = String(newN);
     $("onlyNew").setAttribute("aria-pressed", String(ui.onlyNew));
     $("onlyNew").disabled = !newN && !ui.onlyNew;
@@ -339,7 +359,7 @@
     for (let i = 11; i >= 0; i--) weeks.push(addDays(thisMon, -7 * i));
     const table = [];
     GROUPS.forEach(g => {
-      const mine = hits.filter(h => h._g === g.key);
+      const mine = hits.filter(h => h._g === g.key && visible(h));
       const value = mine.filter(h => inRange(h, from, to)).length;
       const prev = ui.days ? mine.filter(h => inRange(h, addDays(from, -ui.days), from)).length : null;
       const cov = coverage[g.key];
@@ -414,37 +434,89 @@
     return el("span", { class: "jf-pill " + (h.strong ? "strong" : "maybe"), title: `Kulcsszó-pontszám: ${h.score}`, text: `${h.strong ? "erős" : "lehetséges"} · ${h.score}` });
   }
   const terms = h => h.terms && h.terms.length ? el("span", { text: h.terms.slice(0, 4).join(", ") }) : null;
+  const techPill = h => h.technical ? el("span", { class: "jf-pill tech", title: h.technical, text: "technikai" }) : null;
+  const where = c => c.section ? `${c.statute} ${c.section}. §${c.par ? ` (${c.par})` : ""}` : `${c.statute} (cím)`;
+
+  function marked(text, marks) {
+    // Highlight the spans the watcher matched; everything stays text nodes.
+    const p = el("p", { class: "jf-excerpt" });
+    let at = 0;
+    (Array.isArray(marks) ? marks : []).filter(m => Array.isArray(m) && m[0] >= at && m[1] <= text.length && m[1] > m[0])
+      .forEach(([a, b]) => { p.append(text.slice(at, a), el("mark", { text: text.slice(a, b) })); at = b; });
+    p.append(text.slice(at));
+    return p;
+  }
+
+  function decisionBlock(h, principle) {
+    // What was decided comes first; the principle is there for whoever wants it.
+    const out = [];
+    if (h.outcome) {
+      const label = [h.form ? h.form.charAt(0).toUpperCase() + h.form.slice(1) : "Döntés",
+        h.decided && parseDay(h.decided) ? `kelt ${short(parseDay(h.decided))}` : null].filter(Boolean).join(" · ");
+      out.push(el("div", { class: "jf-outcome-label", text: label }));
+      const p = el("p", { class: "jf-summary jf-outcome" + (h.outcome.length > 300 ? " clamp" : ""), text: h.outcome });
+      out.push(p);
+      if (h.outcome.length > 300) {
+        const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: "Teljes rendelkező rész" });
+        btn.addEventListener("click", () => {
+          const clamped = p.classList.toggle("clamp");
+          btn.setAttribute("aria-expanded", String(!clamped));
+          btn.textContent = clamped ? "Teljes rendelkező rész" : "Kevesebb";
+        });
+        out.push(btn);
+      }
+    }
+    if (principle) {
+      if (h.outcome) out.push(el("details", { class: "jf-principle" }, el("summary", { text: "Elvi tartalom" }), el("p", { text: principle })));
+      else out.push(...summaryBlock(principle));
+    }
+    return out;
+  }
 
   function itemNode(group) {
     const h = group[0], fresh = group.some(isNew);
     const src = el("div", { class: "jf-src" }, el("span", { class: "jf-label", text: sourceTag(h) }),
       fresh ? el("span", { class: "jf-pill new", title: "Új az előző látogatásod óta", text: "új" }) : null,
+      h.k === "kozlony" && h.strong ? el("span", { class: "jf-pill alert", text: "erős jelzés" }) : null,
+      techPill(h),
       h.k === "kozlony" && h.page ? el("span", { class: "jf-page", text: `${h.page}. oldal` }) : null);
     const kids = [src];
     if (h.k === "kozlony") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" })));
       if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
-      kids.push(el("div", { class: "jf-meta" }, scorePill(h), link(h.issue || "Közlöny", h.url), link("PDF", h.pdf), terms(h)));
+      const changes = Array.isArray(h.changes) ? h.changes : [];
+      const topic = h.topic && typeof h.topic === "object" ? h.topic : null;
+      if (topic) kids.push(el("div", { class: "jf-changes" }, el("span", { class: "jf-change" + (topic.weight >= 8 ? " hot" : ""), title: "A cím alapján" },
+        `Tárgy: ${topic.note || ""}`, el("small", { text: `súly ${topic.weight}` }))));
+      if (changes.length) kids.push(el("div", { class: "jf-changes", "aria-label": "Módosított szakaszok" }, changes.slice(0, 10).map(c =>
+        el("span", { class: "jf-change" + (c.wording ? " wording" : c.weight >= 8 ? " hot" : ""),
+          title: c.wording ? "csak szövegrész változik" : `súly ${c.weight}` }, where(c), el("small", { text: c.wording ? "szövegrész" : `súly ${c.weight}` })))));
+      if (h.excerpt) kids.push(marked(h.excerpt, h.marks));
+      kids.push(el("div", { class: "jf-meta" }, h.effective ? el("span", { text: `Hatálybalépés: ${h.effective}` }) : null,
+        link(h.issue || "Közlöny", h.url), link("PDF", h.pdf)));
     } else if (h.k === "bhgy") {
       kids.push(el("div", { class: "jf-refs" }, group.map((x, i) => el("span", {},
         i === 0 || x.court !== group[i - 1].court ? el("span", { class: "jf-court", text: (x.court || "") + " " }) : null,
         link(x.ref || "határozat", x.pdf, "jf-ref") || el("span", { class: "jf-ref", text: x.ref || "" })))));
-      if (h.summary) kids.push(...summaryBlock(h.summary));
-      kids.push(el("div", { class: "jf-meta" }, group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null));
+      kids.push(...decisionBlock(h, h.summary));
+      kids.push(el("div", { class: "jf-meta" }, group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null,
+        h.technical ? el("span", { text: h.technical }) : null));
     } else if (h.k === "kuria") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-court", text: h.ref || "" })));
-      if (h.title) kids.push(...summaryBlock(h.title));
+      if (h.outcome) kids.push(...decisionBlock(h, h.title));
+      else if (h.title) kids.push(...summaryBlock(h.title));
       kids.push(el("div", { class: "jf-meta" }, scorePill(h), link("A Kúria oldalán", h.url), terms(h)));
     } else if (h.k === "kuria_bh") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-page", text: h.case || "" })));
-      if (h.title) kids.push(...summaryBlock(h.title));
+      kids.push(...decisionBlock(h, h.title));
       kids.push(el("div", { class: "jf-meta" }, h.section ? el("span", { text: h.section }) : null, link(h.issue || "Lapszám (PDF)", h.url)));
     } else if (h.k === "ab") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-court", text: h.kind || "" })));
-      if (h.title) kids.push(...summaryBlock(h.title));
+      if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
+      kids.push(...decisionBlock(h, null));
       kids.push(el("div", { class: "jf-meta" }, link("Döntés (PDF)", h.pdf), link("Adatlap", h.url), terms(h)));
     }
-    return el("article", { class: "jf-item" }, kids);
+    return el("article", { class: "jf-item" + (h.technical ? " is-tech" : "") }, kids);
   }
 
   function dayDate(d) {
@@ -459,7 +531,7 @@
     const feed = $("feed");
     const [from, to] = rangeBounds(ui.days);
     const q = fold(ui.q.trim());
-    const list = hits.filter(h => ui.groups.has(h._g) && inRange(h, from, to) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
+    const list = hits.filter(h => ui.groups.has(h._g) && visible(h) && inRange(h, from, to) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
     // Parallel cases often repeat one principle word for word: show them once.
     const groups = [], same = new Map();
     list.forEach(h => {
@@ -491,6 +563,7 @@
     ui.days = Number(b.dataset.days); ui.shown = PAGE; store.set("jf.days", String(ui.days)); render();
   }));
   $("onlyNew").addEventListener("click", () => { ui.onlyNew = !ui.onlyNew; ui.shown = PAGE; render(); });
+  $("showTech").addEventListener("click", () => { ui.showTech = !ui.showTech; store.set("jf.tech", ui.showTech ? "1" : "0"); ui.shown = PAGE; render(); });
   let qTimer = null;
   $("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { ui.q = e.target.value; ui.shown = PAGE; renderFeed(); }, 150); });
 

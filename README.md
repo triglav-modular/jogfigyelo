@@ -5,10 +5,10 @@ publishes what it finds at **https://amunka.hu/jogfigyelo/**.
 
 | Source | What is reported |
 |---|---|
-| Magyar Közlöny (`magyarkozlony.hu/feed`) | Each act of each new issue, scored against the labour-law patterns in `config.toml` |
-| Anonymized court decisions (`eakta.birosag.hu`) | Every new decision of the labour chamber, and public-service disputes |
+| Magyar Közlöny (`magyarkozlony.hu/feed`) | Each act that amends a statute of the base labour-law package (`torvenyek.toml`), with the sections it changes, the amending text and the entry into force; and acts whose title is labour-related |
+| Anonymized court decisions (`eakta.birosag.hu`) | Every new decision of the labour chamber, and public-service disputes, with the operative part of the decision |
 | Kúria (`kuria-birosag.hu`) | Labour-related uniformity decisions, uniformity complaints and press releases; the monthly *Kúriai Döntések*, labour section whole |
-| Alkotmánybíróság (`alkotmanybirosag.hu`) | New decisions whose subject is labour-related |
+| Alkotmánybíróság (`alkotmanybirosag.hu`) | New decisions whose subject is labour-related, with their operative part |
 
 ## Running it
 
@@ -37,14 +37,21 @@ Requires Python 3.11+ and poppler (`pdftotext`, `pdfinfo`).
 
 ## Tuning
 
-What counts as labour-related is in `config.toml`: weighted patterns, the
-score thresholds, which court-decision queries to run. Try a change on a
-downloaded gazette issue before relying on it:
+**Gazette acts** are matched against the base package in `torvenyek.toml`:
+the statutes followed, a weight for each, and weights for single sections
+where one matters more or less than the rest (Mt. 69. §, the notice period,
+is 10; Mt. 102. §, public holidays, is 2). An act that changes a section of
+weight `strong_weight` or more is a strong alert. A change that only swaps or
+strikes out a phrase never is. See what an issue would trigger with:
 
 ```
 python3 jogfigyelo.py --pdf MK_26_138.pdf
 ```
 
-Gazette acts are scored by pattern density rather than presence, so an
-incidental mention in a long act counts for little; a title match counts
-three times, and an amendment to a core labour act always counts in full.
+**Technical entries** are reported but hidden on the dashboard by default:
+acts that only swap or strike out wording, and court orders that settle
+procedure rather than the claim (`technical_case_types`, `technical_orders`
+in `config.toml`).
+
+The older keyword weighting (`keyword_scoring` in `config.toml`) is switched
+off; court decisions and Kúria press releases are still matched on keywords.

@@ -129,6 +129,10 @@ class Scorer:
             found.append((s, name))
         return round(total), [name for _, name in sorted(found, key=lambda f: -f[0])]
 
+    def spans(self, text):
+        """[(start, end, weight)] of every pattern match in `text`."""
+        return sorted((m.start(), m.end(), weight) for _, weight, rx in self.patterns for m in rx.finditer(text))
+
 
 # --- Magyar Közlöny -------------------------------------------------------
 
@@ -143,9 +147,16 @@ ACT_ID = re.compile(r"""^\s{0,24}(?P<id>
 TOC_PAGE = re.compile(r"\s(\d{1,5})\s*$")
 
 
-def pdf_text(path):
-    out = subprocess.run(["pdftotext", "-layout", str(path), "-"], capture_output=True, check=True)
+def pdf_text(path, layout=True):
+    out = subprocess.run(["pdftotext", *(["-layout"] if layout else []), str(path), "-"], capture_output=True, check=True)
     return out.stdout.decode("utf-8", "replace")
+
+
+def fetch_pdf_text(url, layout=True):
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        tmp.write(fetch(url))
+        tmp.flush()
+        return pdf_text(tmp.name, layout)
 
 
 def page_offset(pages):
@@ -232,6 +243,127 @@ def kozlony_acts(text):
     return [dict(e, body=squash(full[begins[i]:begins[i + 1]])) for i, e in enumerate(entries)]
 
 
+BOILERPLATE = re.compile(r"felhatalmazás alapján|feladatkörében eljárva|a következőket rendel|lép hatályba|hatályát veszti\.?$"
+                         r"|^\[\d+\]|s\. k\.,|M A G Y A R")
+
+
+def act_excerpt(act, scorer, most=2):
+    """The act's own sentences that carry its strongest labour terms.
+
+    Returns (text, marks): up to `most` sentences in document order, and the
+    [start, end] of each match inside the text, for highlighting.
+    """
+    body = act["body"]
+    first = re.search(r"\b1\. §|^1\. ", body)
+    body = body[first.start():] if first else body
+    sentences = re.split(r"(?<=[.;:])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ„(\d])", body)
+    ranked = []
+    for i, sent in enumerate(sentences):
+        if len(sent) < 25 or BOILERPLATE.search(sent):
+            continue
+        spans = scorer.spans(sent)
+        if spans:
+            ranked.append((-sum({w for _, _, w in spans}), i, sent))
+    picked = sorted(sorted(ranked)[:most], key=lambda r: r[1])
+    text = " … ".join(clip(re.sub(r"^\d+\. §\s*", "", sent), 320) for _, _, sent in picked)
+    marks = [[a, b] for a, b, _ in scorer.spans(text)]
+    return text, marks
+
+
+def act_effective(act):
+    """The closing provision on entry into force, as the act words it."""
+    m = re.search(r"[^.]*\blép(?:nek)? hatályba\b[^.]*\.", act["body"])
+    return clip(re.sub(r"^\s*\d+\. §\s*", "", m.group(0)).strip(), 240) if m else ""
+
+
+# An amending act is technical when every change it makes is to wording:
+# phrases swapped ("szövegrész helyébe a … szöveg lép") or struck out
+# ("… szövegrész hatályát veszti"). New or replaced provisions are not.
+SUBSTANTIVE = re.compile(r"helyébe a következő|egészül ki|a következő [^.]{0,60}?(?:lép|kerül)\b"
+                         r"|melléklet(?:e)? helyébe|(?:§-a|bekezdése|pontja|alpontja) hatályát veszti", re.I)
+
+
+def technical_act(act):
+    if not act["id"] or "módosításáról" not in act["title"] or "szövegrész" not in act["body"]:
+        return ""
+    return "" if SUBSTANTIVE.search(act["body"]) else "csak szövegrészeket cserél vagy töröl"
+
+
+class Package:
+    """The base statutes (torvenyek.toml), and which sections an act amends."""
+
+    STATUTE_NUMBER = r"\d{4}\.\s*évi\s+[IVXLCDM]+\.\s*törvény\w*"
+    DECREE_NUMBER = r"\d+/\d{4}\.\s*\([IVX]+\.\s*\d+\.\)\s*[\w.]+\s*rendelet\w*"
+    # The legal basis a decree is issued under cites sections without changing them.
+    LEGAL_BASIS = re.compile(r"felhatalmazás|hatáskörében eljárva|feladatkörében eljárva|a következőket rendel", re.I)
+    SECTION = r"(\d+(?:/[A-Z])?)\.\s*§"
+    AMENDS = re.compile(r"helyébe|egészül ki|kiegészül|hatályát veszti|szövegrész", re.I)
+
+    def __init__(self, cfg):
+        self.strong = cfg["strong_weight"]
+        self.statutes = cfg["statute"]
+        self.topics = [(re.compile(t["re"], re.I), t["weight"], t["note"]) for t in cfg.get("topic", [])]
+
+    def topic(self, title):
+        """{note, weight} of the heaviest topic the title names, or None."""
+        found = [(w, note) for rx, w, note in self.topics if rx.search(title)]
+        return {"note": max(found)[1], "weight": max(found)[0]} if found else None
+
+    def weight(self, statute, section):
+        return statute.get("sections", {}).get(section, statute["weight"])
+
+    def changes(self, act):
+        """[{statute, section, par, weight, wording, clause, new}], strongest first."""
+        body, found = act["body"], {}
+        for st in self.statutes:
+            # A statute and its implementing decree often share a name:
+            # match the kind of act the entry is.
+            number = self.STATUTE_NUMBER if "törvény" in st.get("number", "törvény") else self.DECREE_NUMBER
+            cite = re.escape(st["name"]) + r"\s+szóló\s+" + number
+            aliases = {st["short"]}
+            aliases.update(m.group(1).strip() for m in re.finditer(cite + r"\s*\(a továbbiakban:\s*([^)]{1,20})\)", body))
+            anchor = re.compile(cite + r"(?:\s*\(a továbbiakban:[^)]*\))?|(?<![\w.])(?:" +
+                                "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True)) + r")(?![\w])")
+            for m in anchor.finditer(body):
+                ref = re.match(r"(?:-\w+)?\s*(?:a\s+következő\s+)?" + self.SECTION + r"(?:-\w+)?(?:\s*\((\d+[a-z]?)\)\s*bekezdés\w*)?",
+                               body[m.end():m.end() + 120])
+                if not ref:
+                    continue
+                start = max(body.rfind(". ", 0, m.start()), body.rfind(": ", 0, m.start()), body.rfind("” ", 0, m.start()), 0)
+                end = re.compile(r":|\.\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ„\d])").search(body, m.end() + ref.end())
+                stop = end.start() if end else min(len(body), m.end() + 400)
+                clause = body[start:stop + 1].lstrip(". :”")
+                if not self.AMENDS.search(clause) or self.LEGAL_BASIS.search(clause):
+                    continue  # a mere reference, or the legal basis of a decree
+                new = ""
+                if end and body[end.start()] == ":":
+                    q = re.match(r"\s*„(.*?)”", body[end.end():end.end() + 3000], re.S)
+                    new = clip(q.group(1), 420) if q else ""
+                wording = "szövegrész" in clause and not re.search(r"helyébe a következő|egészül ki", clause)
+                sections = [ref.group(1)] + re.findall(self.SECTION, body[m.end() + ref.end():stop])
+                for i, sec in enumerate(dict.fromkeys(sections)):
+                    key = (st["short"], sec, ref.group(2) if i == 0 else None)
+                    if key not in found:
+                        found[key] = {"statute": st["short"], "section": sec, "par": key[2], "weight": self.weight(st, sec),
+                                      "wording": wording, "clause": clip(clause, 420), "new": new}
+            # An act titled as amending the statute counts even where its
+            # provisions escape the pattern above.
+            if not any(k[0] == st["short"] for k in found) and re.search(re.escape(st["name"]) + r"\s+szóló[^.]{0,80}?módosításáról", act["title"]):
+                found[(st["short"], None, None)] = {"statute": st["short"], "section": None, "par": None, "weight": st["weight"],
+                                                    "wording": False, "clause": act["title"], "new": ""}
+        # Substantive changes first: a changed phrase is housekeeping
+        # whatever the section's weight.
+        return sorted(found.values(), key=lambda c: (c["wording"], -c["weight"]))
+
+    def level(self, changes):
+        """Weight of the strongest substantive change, else of any change."""
+        real = [c["weight"] for c in changes if not c["wording"]]
+        return max(real) if real else max((c["weight"] for c in changes), default=None)
+
+    def is_strong(self, changes):
+        return any(c["weight"] >= self.strong and not c["wording"] for c in changes)
+
+
 def score_acts(acts, scorer, cfg):
     skip = [re.compile(rx) for rx in cfg.get("skip_acts", [])]
     for act in acts:
@@ -242,7 +374,7 @@ def score_acts(acts, scorer, cfg):
     return acts
 
 
-def check_kozlony(cfg, scorer, seen, cutoff, errors):
+def check_kozlony(cfg, scorer, package, seen, cutoff, errors):
     root = ET.fromstring(fetch(KOZLONY_FEED))
     hits, marked = [], {}
     for item in root.iter("item"):
@@ -269,11 +401,30 @@ def check_kozlony(cfg, scorer, seen, cutoff, errors):
             errors.append(f"Magyar Közlöny, {issue}: a tartalomjegyzék nem volt értelmezhető, "
                           "a teljes számot egyben pontoztam")
         for act in acts:
-            if act["score"] < cfg["min_score"]:
+            changes = package.changes(act) if act["id"] else []
+            topic = package.topic(act["title"]) if act["id"] else None
+            scored = cfg.get("keyword_scoring", False) and act["score"] >= cfg["min_score"]
+            if not (changes or topic or scored):
                 continue
+            if changes:
+                top = changes[0]
+                excerpt = top["clause"] + (f" „{top['new']}”" if top["new"] else "")
+                marks = [[m.start(), m.end()] for m in re.finditer(re.escape(top["statute"]) + r"|\d+(?:/[A-Z])?\.\s*§(?:\s*\(\d+[a-z]?\))?", excerpt)]
+                technical = "csak szövegrészeket cserél vagy töröl" if all(c["wording"] for c in changes) else ""
+            else:
+                excerpt, marks = act_excerpt(act, scorer)
+                technical = technical_act(act)
+            level = max([w for w in (package.level(changes), topic and topic["weight"]) if w], default=None)
             hits.append({
+                "changes": [{k: c[k] for k in ("statute", "section", "par", "weight", "wording", "new") if c[k] not in (None, "")}
+                            for c in changes],
+                "level": level,
                 "source": "kozlony",
                 "id": f'{guid}#{act["id"] or ""}',
+                "excerpt": excerpt,
+                "marks": marks,
+                "effective": act_effective(act),
+                "technical": technical,
                 "date": published.date().isoformat(),
                 "issue": issue,
                 "ref": act["id"] or issue,
@@ -281,9 +432,10 @@ def check_kozlony(cfg, scorer, seen, cutoff, errors):
                 "page": act["page"],
                 "url": guid,
                 "pdf": pdf_url,
-                "score": act["score"],
-                "strong": act["score"] >= cfg["strong_score"],
-                "terms": act["terms"],
+                "score": act["score"] if cfg.get("keyword_scoring", False) else None,
+                "strong": package.is_strong(changes) or bool(topic and topic["weight"] >= package.strong and not technical),
+                "topic": topic,
+                "terms": act["terms"] if cfg.get("keyword_scoring", False) else [],
             })
         marked[guid] = published.date().isoformat()
     return hits, marked
@@ -291,7 +443,70 @@ def check_kozlony(cfg, scorer, seen, cutoff, errors):
 
 # --- Anonymized court decisions ------------------------------------------
 
-def check_bhgy(query, seen, cutoff):
+SPACED = lambda word: r"\s*".join(word)
+# Matched after letter-spaced words ("v é g z é s t") are closed up. A
+# qualifier may stand before the form: közbenső, kiegészítő, kijavító, rész-.
+OPERATIVE = re.compile(
+    r"^\s*(?:(?P<rr>Rendelkező rész)|(?P<qcap>(?:közbenső|kiegészítő|kijavító|rész)\s*)?(?P<cap>ÍTÉLET|VÉGZÉS|HATÁROZAT)\w*\s*[:.]?)\s*$"
+    r"|(?:következő|alábbi)\s*\n?\s*(?P<q>[\wáéíóöőúüű]+\s+)?(?P<acc>[\wáéíóöőúüű]*?(?:ítéletet|végzést|határozatot))\s*[:.]?\s*$",
+    re.M | re.I)
+REASONS = re.compile(r"^\s*(?:Indokolás|INDOKOLÁS)\s*[:.]?\s*$", re.M)
+QUALIFIERS = ("közbenső", "kiegészítő", "kijavító", "rész")
+RUNNING_HEAD = re.compile(r"^\s*(?:\d{1,3}|[IVX]*\.?\s*[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]+\.[IVX]*\.?[\d.\s]+/\d{4}/\d+[-IVX.]*"
+                          r"|.*(?:Ítélőtábla|Törvényszék|Kúria|Bíróság)|alkotmanybirosag\.hu)\s*$")
+
+
+def decision_parts(text):
+    """The operative part of a decision, its form and date, from its text.
+
+    The operative part runs from "Rendelkező rész" (Kúria), "ÍTÉLET" or
+    "…meghozta a következő ítéletet/végzést/határozatot" to "Indokolás"; the
+    reasons are left out. Sums spelt out in words and the standard notice on
+    hearings are dropped. Returns {} when the markers are not there.
+    """
+    text = re.sub(r"\b(?:\w ){3,}\w\b", lambda w: w.group(0).replace(" ", ""), text)  # k i j a v í t ó
+    m = OPERATIVE.search(text)
+    end = REASONS.search(text, m.end()) if m else None
+    if not end:
+        return {}
+    word = (m.group("cap") or m.group("acc") or "").lower()
+    qualifier = ((m.group("q") or m.group("qcap") or "") + word).lower()
+    qualifier = next((q for q in QUALIFIERS if qualifier.startswith(q)), "")
+    if m.group("rr"):
+        head = text[:m.start()][:400]
+        word = "végzés" if re.search(r"\bvégzése\b", head) else "ítélet" if re.search(r"\bítélete\b", head) else "határozat"
+    form = "végzés" if "végz" in word else "ítélet" if "ítél" in word else "határozat"
+    if qualifier:
+        form = f"{qualifier}{'' if qualifier == 'rész' else ' '}{form}"
+    lines = [line.strip() for line in text[m.end():end.start()].splitlines() if line.strip() and not RUNNING_HEAD.match(line)]
+    out = re.sub(r"(\w)- (\w)", r"\1\2", " ".join(lines))
+    out = re.sub(r"\s*\((?:azaz:?\s*)?(?=[^)]*[a-zőű]-[a-zőű])[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű :-]{12,}\)", "", out)
+    out = re.sub(r"\bforint(?: forint)+\b", "forint", out)
+    out = re.split(r"\s*A bíróság tájékoztatja a feleket", out)[0]
+    decided = ""
+    for y, month, d in reversed(re.findall(r"^\s*[A-ZÁÉÍÓÖŐÚÜŰ][\wáéíóöőúüű-]+,\s*(\d{4})\.\s*(\w+)\s+(\d{1,2})\.", text, re.M)):
+        if month.lower() in HU_MONTHS:
+            decided = f"{y}-{HU_MONTHS.index(month.lower()) + 1:02d}-{int(d):02d}"
+            break
+    return {"form": form, "decided": decided, "outcome": clip(squash(out), 1500)}
+
+
+def technical_order(cfg, form, ref, outcome):
+    """Why a court order settles procedure rather than the claim, or ""."""
+    if form and form.split()[0] in ("kijavító", "kiegészítő"):
+        return f"{form}: egy korábbi határozatot javít vagy egészít ki"
+    if not form or not form.endswith("végzés"):
+        return ""
+    kind = re.match(r"[A-Za-z]+", ref or "")
+    if kind and kind.group(0) in cfg.get("technical_case_types", []):
+        return f"eljárási végzés ({kind.group(0)})"
+    for rx in cfg.get("technical_orders", []):
+        if re.search(rx, outcome or "", re.I):
+            return "eljárási végzés: " + re.search(rx, outcome, re.I).group(0)
+    return ""
+
+
+def check_bhgy(cfg, query, seen, cutoff):
     form = {k: v for k, v in query.items() if k != "label"}
     form.update(Rendezes="IndexelesIdejeCsokkeno", NemHivatkozhato="nem", ResultCount=100)
     hits, marked = [], {}
@@ -315,7 +530,14 @@ def check_bhgy(query, seen, cutoff):
                 continue
             pdf = BHGY_PDF + "?" + urllib.parse.urlencode(
                 {"birosagName": x["MeghozoBirosag"], "ugyszam": x["Azonosito"], "azonosito": key})
+            try:
+                parts = decision_parts(fetch_pdf_text(pdf, layout=False))
+                time.sleep(0.3)
+            except Exception:
+                parts = {}  # the decision is still reported, with its principle only
             hits.append({
+                **parts,
+                "technical": technical_order(cfg, parts.get("form"), x["Azonosito"], parts.get("outcome")),
                 "source": "bhgy",
                 "label": query["label"],
                 "id": key,
@@ -375,6 +597,11 @@ def kuria_item(url):
     return subject, text, date
 
 
+def kuria_outcome(text):
+    m = re.search(r"(?:Rendelkező rész|jogegységi határozatot:|határozatot:|végzést:)\s*(.*?)\s*Indokolás\b", text)
+    return clip(m.group(1), 1500) if m else ""
+
+
 def check_kuria_lists(cfg, scorer, seen, cutoff):
     hits, marked = [], {}
     for path, prefix in KURIA_LISTS:
@@ -398,8 +625,11 @@ def check_kuria_lists(cfg, scorer, seen, cutoff):
                 score, terms = scorer.score(f"{title} {subject}", text)
                 if score < cfg["min_score"]:
                     continue
+                outcome = "" if prefix == "/hu/sajto/" else kuria_outcome(text)
                 hits.append({
                     "source": "kuria",
+                    "outcome": outcome,
+                    "technical": technical_order(cfg, "végzés" if "végzés" in title else "", title, outcome),
                     "id": url,
                     "date": date.isoformat() if date else "",
                     "kind": "Sajtó" if prefix == "/hu/sajto/" else "Jogegységi eljárás",
@@ -495,12 +725,14 @@ def journal_decisions(pages):
         head = chunk[:m.start()]
         serial = re.search(r"^\s*(\d{1,4})\s*$", head, re.M)
         head = re.sub(r"^\s*\d{1,4}\s*$", "", head, flags=re.M)
+        last = re.split(r"\n\s*\[\d+\]\s*", chunk)[-1]
+        verdict = squash(last) if re.search(r"hatályában fenntart|hatályon kívül|helybenhagy|megváltoztat|elutasít|megsemmisít", last) else ""
         if serial:
-            out.append((section, int(serial.group(1)), squash(head), value))
+            out.append((section, int(serial.group(1)), squash(head), value, clip(verdict, 900)))
     # Serials run on through the year; a number far off the issue's run is
     # a page number or paragraph caught next to a citation.
     if out:
-        median = sorted(d[1] for d in out)[len(out) // 2]
+        median = sorted(d[1] for d in out)[len(out) // 2]  # (section, serial, head, ref, verdict)
         out = [d for d in out if abs(d[1] - median) < 100]
     return out
 
@@ -536,7 +768,7 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
         if not decisions:
             errors.append(f"Kúriai Döntések, {label.strip()}: nem találtam benne határozatot")
             continue
-        for section, serial, head, ref in decisions:
+        for section, serial, head, ref, verdict in decisions:
             if section.startswith("JOGEGYSÉGI"):
                 continue  # these come from the uniformity lists
             score, terms = scorer.score(head)
@@ -551,6 +783,7 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
                 "ref": f"BH {year}.{serial}" if serial and year else ref,
                 "case": ref,
                 "section": section.capitalize(),
+                "outcome": verdict,
                 "title": clip(head),
                 "terms": terms,
             })
@@ -590,7 +823,15 @@ def check_ab(cfg, scorer, seen, cutoff):
         score, terms = scorer.score(subject)
         if score < cfg["ab_min_score"]:
             continue
+        parts = {}
+        if pdf:
+            try:
+                parts = decision_parts(fetch_pdf_text(pdf.group(1), layout=False))
+            except Exception:
+                pass  # reported with its subject only
         hits.append({
+            "outcome": parts.get("outcome", ""),
+            "technical": technical_order(cfg, "végzés" if "végzés" in kind else "", "", parts.get("outcome", "")),
             "source": "ab",
             "id": key,
             "date": date.isoformat(),
@@ -618,7 +859,13 @@ def clip(text, n=700):
     return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + " …"
 
 
+def where(c):
+    return f'{c["statute"]} {c["section"]}. §' + (f' ({c["par"]})' if c.get("par") else "") if c.get("section") else f'{c["statute"]} (cím)'
+
+
 def report(hits, errors, now):
+    technical = [h for h in hits if h.get("technical")]
+    hits = [h for h in hits if not h.get("technical")]
     kozlony = [h for h in hits if h["source"] == "kozlony"]
     bhgy = [h for h in hits if h["source"] == "bhgy"]
     ab = [h for h in hits if h["source"] == "ab"]
@@ -633,11 +880,16 @@ def report(hits, errors, now):
             issues.setdefault((h["date"], h["issue"], h["url"], h["pdf"]), []).append(h)
         for (date, issue, url, pdf), acts in sorted(issues.items(), reverse=True):
             out += [f"**[{issue}]({url})** ({date}, [PDF]({pdf}))", ""]
-            for h in sorted(acts, key=lambda h: -h["score"]):
-                level = "erős" if h["strong"] else "lehetséges"
-                where = f' · {h["page"]}. oldal' if h["page"] else ""
-                out.append(f'- **{h["ref"]}**: {h["title"]}  ')
-                out.append(f'  {level}, {h["score"]} pont{where} · {", ".join(h["terms"][:5])}')
+            for h in sorted(acts, key=lambda h: -(h.get("level") or 0)):
+                page = f' · {h["page"]}. oldal' if h["page"] else ""
+                out.append(f'- **{h["ref"]}**: {h["title"]}{" · **ERŐS JELZÉS**" if h.get("strong") else ""}  ')
+                changes = h.get("changes") or []
+                if changes:
+                    out.append("  " + ", ".join(f'{where(c)} (súly {c["weight"]}{", szövegrész" if c.get("wording") else ""})' for c in changes[:8]) + page + "  ")
+                if h.get("excerpt"):
+                    out.append(f'  > {h["excerpt"]}  ')
+                if h.get("effective"):
+                    out.append(f'  Hatálybalépés: {h["effective"]}  ')
             out.append("")
 
     if bhgy:
@@ -654,7 +906,10 @@ def report(hits, errors, now):
             for hs in same.values():
                 refs = ", ".join(f'[{h["court"]} {h["ref"]}]({h["pdf"]})' for h in hs)
                 dates = sorted({h["date"] for h in hs})
-                out.append(f'- **{refs}** · közzétéve {" – ".join(dates[::max(len(dates) - 1, 1)])}')
+                form = f' · {hs[0]["form"]}' if hs[0].get("form") else ""
+                out.append(f'- **{refs}**{form} · közzétéve {" – ".join(dates[::max(len(dates) - 1, 1)])}')
+                if hs[0].get("outcome"):
+                    out.append(f'  Döntés: {clip(hs[0]["outcome"], 500)}  ')
                 if hs[0]["summary"]:
                     out.append(f'  > {clip(hs[0]["summary"])}')
             out.append("")
@@ -662,7 +917,7 @@ def report(hits, errors, now):
     if kuria or journal:
         out += [f"## Kúria: {len(kuria) + len(journal)}", ""]
         for h in sorted(kuria, key=lambda h: h["date"], reverse=True):
-            level = "erős" if h["strong"] else "lehetséges"
+            level = "erős" if h.get("strong") else "lehetséges"
             out.append(f'- **{h["date"]} · {h["ref"]}** · {h["kind"]} · [oldal]({h["url"]})  ')
             if h["title"]:
                 out.append(f'  {h["title"]}  ')
@@ -686,6 +941,12 @@ def report(hits, errors, now):
             out.append(f'- **{h["date"]} · {h["kind"]}** · {h["ref"]} · {links}  ')
             out.append(f'  {h["title"]}  ')
             out.append(f'  *{", ".join(h["terms"][:5])}*')
+        out.append("")
+
+    if technical:
+        out += [f"## Technikai tételek: {len(technical)}", ""]
+        for h in technical:
+            out.append(f'- {" ".join(x for x in (h.get("court"), h["ref"]) if x)}: {h["technical"]}')
         out.append("")
 
     if errors:
@@ -716,7 +977,8 @@ def read_jsonl(path):
 
 
 DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "score", "strong",
-                    "issue", "page", "kind", "section", "case", "found")
+                    "issue", "page", "kind", "section", "case", "found", "outcome", "form", "decided",
+                    "technical", "excerpt", "marks", "effective", "changes", "level", "topic")
 
 
 def export(data, out):
@@ -727,7 +989,11 @@ def export(data, out):
     """
     latest = {}
     for h in read_jsonl(data / "talalatok.jsonl"):
-        latest[(h["source"], h["id"])] = h
+        key = (h["source"], h["id"])
+        # A find logged again (a re-run with better extraction) keeps its
+        # newer fields and the time it was first found.
+        first = latest[key]["found"] if key in latest else h["found"]
+        latest[key] = dict(h, found=min(first, h["found"]))
     rows = []
     for h in latest.values():
         row = {"k": h["source"], "id": h["id"],
@@ -745,17 +1011,25 @@ def export(data, out):
     print(f"{len(rows)} találat, {len(runs)} futás: {out}")
 
 
-def score_pdfs(paths, cfg, scorer):
+def score_pdfs(paths, cfg, scorer, package):
     for path in paths:
         acts = score_acts(kozlony_acts(pdf_text(path)), scorer, cfg)
         print(f"== {path}: {len(acts)} aktus")
         if acts[0]["id"] is None:
             print("   (a tartalomjegyzék nem értelmezhető, a teljes szám egyben)")
-        for a in sorted(acts, key=lambda a: -a["score"]):
-            mark = "ERŐS" if a["score"] >= cfg["strong_score"] else "igen" if a["score"] >= cfg["min_score"] else "  - "
-            print(f'{a["score"]:4d} {mark:4s} {a["id"] or "":38s} {a["title"][:70]}')
-            if a["score"] >= cfg["min_score"]:
-                print(f'{"":48s}{", ".join(a["terms"][:6])}')
+        for a in acts:
+            changes = package.changes(a) if a["id"] else []
+            topic = package.topic(a["title"]) if a["id"] else None
+            if topic and not changes:
+                print(f'{topic["weight"]:3d} {"ERŐS" if topic["weight"] >= package.strong else "    "} {a["id"]:38s} {a["title"][:70]}')
+                print(f'{"":10s}tárgy: {topic["note"]}')
+            if not changes:
+                continue
+            mark = "ERŐS" if package.is_strong(changes) else "TECH" if all(c["wording"] for c in changes) else "    "
+            print(f'{package.level(changes):3d} {mark} {a["id"]:38s} {a["title"][:70]}')
+            for c in changes[:6]:
+                where = f'{c["statute"]} {c["section"]}. §' + (f' ({c["par"]})' if c["par"] else "") if c["section"] else f'{c["statute"]} (cím)'
+                print(f'{"":10s}{where:22s} súly {c["weight"]:2d}{" szövegrész" if c["wording"] else ""} | {c["clause"][:90]}')
 
 
 def main():
@@ -765,6 +1039,7 @@ def main():
     ap.add_argument("--since", type=int, metavar="DAYS", help="ignore anything unseen that is older than this")
     ap.add_argument("--dry-run", action="store_true", help="print the report, write nothing")
     ap.add_argument("--pdf", type=Path, nargs="+", metavar="FILE", help="score downloaded Közlöny issues and exit")
+    ap.add_argument("--only", metavar="SOURCES", help="check only these sources, comma-separated (kozlony,bhgy,kuria,kuria_bh,ab)")
     ap.add_argument("--export", type=Path, metavar="FILE", help="write every find and run as the dashboard's data file and exit")
     args = ap.parse_args()
     if args.export:
@@ -773,10 +1048,11 @@ def main():
 
     cfg = tomllib.loads(args.config.read_text())
     scorer = Scorer(cfg)
+    package = Package(tomllib.loads((HERE / "torvenyek.toml").read_text()))
     if not shutil.which("pdftotext"):
         sys.exit("pdftotext is missing: brew install poppler, or apt-get install poppler-utils")
     if args.pdf:
-        score_pdfs(args.pdf, cfg, scorer)
+        score_pdfs(args.pdf, cfg, scorer, package)
         return 0
 
     now = dt.datetime.now(dt.timezone.utc).astimezone()
@@ -790,7 +1066,11 @@ def main():
     # or the oldest item a source still lists where it keeps less than that.
     coverage = {}
 
+    only = set(args.only.split(",")) if args.only else None
+
     def run(source, check):
+        if only and source not in only:
+            return
         seen = state["seen"].setdefault(source, {})
         days = args.since if args.since is not None else cfg["first_run_days"] if source in new_sources else None
         cutoff = now - dt.timedelta(days=days) if days is not None else None
@@ -806,9 +1086,9 @@ def main():
             start = max(cutoff.date().isoformat(), min(dates))
             coverage[source] = min(coverage.get(source, start), start)
 
-    run("kozlony", lambda seen, cutoff: check_kozlony(cfg, scorer, seen, cutoff, errors))
+    run("kozlony", lambda seen, cutoff: check_kozlony(cfg, scorer, package, seen, cutoff, errors))
     for query in cfg.get("bhgy", []):
-        run("bhgy", lambda seen, cutoff, q=query: check_bhgy(q, seen, cutoff))
+        run("bhgy", lambda seen, cutoff, q=query: check_bhgy(cfg, q, seen, cutoff))
     run("kuria", lambda seen, cutoff: check_kuria_lists(cfg, scorer, seen, cutoff))
     run("kuria_bh", lambda seen, cutoff: check_kuria_journal(cfg, scorer, seen, cutoff, errors))
     run("ab", lambda seen, cutoff: check_ab(cfg, scorer, seen, cutoff))

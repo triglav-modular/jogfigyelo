@@ -1,0 +1,138 @@
+# Alap törvénycsomag: the statutes the watcher follows in the Magyar Közlöny.
+#
+# When a gazette act amends one of these, it is reported. How loudly comes
+# from the weight of the section it changes where one is set below, and from
+# the statute's own weight otherwise. From `strong_weight` up the dashboard
+# shows it as a strong alert.
+#
+# Weights are placeholders until they are calibrated against earlier
+# amending acts: 10 is core worker protection (a notice period), 1 is
+# housekeeping. Sections are keyed as the gazette numbers them: "69", "69/A".
+#
+# `name` is matched as it stands before "szóló" in the gazette's own
+# citation ("a munka törvénykönyvéről szóló 2012. évi I. törvény"), so a
+# decree can be followed the same way. `number` is for people: it is not
+# matched. Abbreviations an act defines for itself ("a továbbiakban: Mt.")
+# are picked up from the act, `short` as well.
+#
+# Test against a downloaded issue:  python3 jogfigyelo.py --pdf MK_26_138.pdf
+
+strong_weight = 8
+
+[[statute]]
+short = "Mt."
+name = "munka törvénykönyvéről"
+number = "2012. évi I. törvény"
+weight = 5
+[statute.sections]
+"69" = 10   # felmondási idő
+"102" = 2   # munkaszüneti napok
+
+[[statute]]
+short = "Kjt."
+name = "közalkalmazottak jogállásáról"
+number = "1992. évi XXXIII. törvény"
+weight = 4
+
+[[statute]]
+short = "Kttv."
+name = "közszolgálati tisztviselőkről"
+number = "2011. évi CXCIX. törvény"
+weight = 4
+
+[[statute]]
+short = "Mvt."
+name = "munkavédelemről"
+number = "1993. évi XCIII. törvény"
+weight = 5
+
+[[statute]]
+short = "Met."
+name = "munkaügyi ellenőrzésről"
+number = "1996. évi LXXV. törvény"   # not yet seen in a gazette text
+weight = 4
+
+[[statute]]
+short = "Flt."
+name = "foglalkoztatás elősegítéséről és a munkanélküliek ellátásáról"
+number = "1991. évi IV. törvény"
+weight = 3
+
+[[statute]]
+short = "Efo."
+name = "egyszerűsített foglalkoztatásról"
+number = "2010. évi LXXV. törvény"   # not yet seen in a gazette text
+weight = 3
+
+[[statute]]
+short = "Kftv."
+name = "közfoglalkoztatásról és a közfoglalkoztatáshoz kapcsolódó, valamint egyéb törvények módosításáról"
+number = "2011. évi CVI. törvény"
+weight = 3
+
+[[statute]]
+short = "Sztrájktv."
+name = "sztrájkról"
+number = "1989. évi VII. törvény"   # not yet seen in a gazette text
+weight = 6
+
+[[statute]]
+short = "Púétv."
+name = "pedagógusok új életpályájáról"
+number = "2023. évi LII. törvény"
+weight = 3
+
+[[statute]]
+short = "Eszjtv."
+name = "egészségügyi szolgálati jogviszonyról"
+number = "2020. évi C. törvény"
+weight = 3
+
+[[statute]]
+short = "Hszt."
+name = "rendvédelmi feladatokat ellátó szervek hivatásos állományának szolgálati jogviszonyáról"
+number = "2015. évi XLII. törvény"
+weight = 3
+
+[[statute]]
+short = "Hjt."
+name = "honvédek jogállásáról"
+number = "2012. évi CCV. törvény"
+weight = 2
+
+[[statute]]
+short = "Mmtv."
+name = "megváltozott munkaképességű személyek ellátásairól és egyes törvények módosításáról"
+number = "2011. évi CXCI. törvény"
+weight = 3
+
+[[statute]]
+short = "Kit."
+name = "kormányzati igazgatásról"
+number = "2018. évi CXXV. törvény"
+weight = 2
+
+[[statute]]
+short = "NGTT tv."
+name = "Nemzeti Gazdasági és Társadalmi Tanácsról"
+number = "2011. évi XCIII. törvény"
+weight = 3
+
+# Acts that matter for what they are rather than for a statute they amend,
+# recognised by their title: the yearly decree on which days are worked
+# ("a 2027. évi munkaszüneti napok körüli munkarendről") and its amendments,
+# the minimum-wage decree. Weights as above.
+[[topic]]
+note = "munkaszüneti napok, munkanap-áthelyezés"
+re = 'munkaszüneti nap|munkanap-?áthelyez|körüli munkarend'
+weight = 9
+
+[[topic]]
+note = "minimálbér, garantált bérminimum"
+re = 'minimálbér|legkisebb munkabér|garantált bérminimum'
+weight = 9
+
+[[topic]]
+note = "munkajogi tárgy"
+re = 'munkavédelm|sztrájk|szakszervezet|kollektív szerződés|közfoglalkoztat|álláskeres|munkanélküli|munkaerő-?kölcsönz|vendég-?munkás|foglalkoztatás'
+weight = 3

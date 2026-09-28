@@ -17,6 +17,12 @@
 # Test a change against a downloaded issue before relying on it:
 #   python3 jogfigyelo.py --pdf MK_26_138.pdf
 
+# Gazette acts are reported when they amend a statute of the base package or
+# their title names one of its topics (torvenyek.toml). The keyword
+# weighting below is switched off until it is rebuilt on real amending acts;
+# `keyword_scoring = true` brings it back as it was.
+keyword_scoring = false
+
 min_score = 5
 strong_score = 10
 full_density = 2
@@ -36,6 +42,26 @@ kozlony_types = ["Magyar Közlöny"]
 # Közlöny acts never reported, matched against the act's id. Presidential
 # and prime-ministerial resolutions are appointments, dismissals and ranks.
 skip_acts = ['KE határozat$', 'ME határozat$']
+
+# Technical entries are reported but hidden on the dashboard by default.
+# A gazette act is technical when it only swaps or strikes out phrases. A
+# court order (végzés) is technical when it settles procedure rather than
+# the claim: an order in one of these case types (Mpkf: appeal against a
+# procedural order in a labour case) ...
+technical_case_types = ["Mpkf", "Mpk", "Pkf", "Gpkf", "Kpkf", "Kpk"]
+# ... or one whose operative part says one of these.
+technical_orders = [
+  'befogadását megtagadja',
+  'felülvizsgálatot megtagadja',
+  'felülvizsgálat engedélyezését megtagadja',
+  'visszautasítja',
+  'felfüggeszt',
+  'pénzbírság',
+  'igazolási kérelm',
+  'az eljárást megszünteti',
+  'javítja ki',
+  'egészíti ki',
+]
 
 # Anonymized court decisions (eakta.birosag.hu). Every decision a query
 # returns is reported; the fields are the site's own search parameters.
