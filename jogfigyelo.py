@@ -20,8 +20,15 @@ onto DATA/talalatok.jsonl; DATA/state.json remembers what has been seen. A
 source that fails is not marked as seen, so the next run retries it, and the
 run exits 1.
 
+Each run is also logged on DATA/runs.jsonl, and --export writes what was
+found since the last export as dashboard batch documents (JSON). The
+dashboard, https://claude.ai/artifact/Rp9fWZgzj7q362do8GrbPc, reads them
+from its database's "batches" collection, one document per file, doc id =
+file name without ".json"; Claude writes them there (ArtifactData, "set").
+
   tools/jogfigyelo/jogfigyelo.py              check every source
   tools/jogfigyelo/jogfigyelo.py --dry-run    report, but remember nothing
+  tools/jogfigyelo/jogfigyelo.py --export DIR write new finds as batch docs
   tools/jogfigyelo/jogfigyelo.py --pdf FILE   score a downloaded Közlöny issue
 
 Needs Python 3.11+ and pdftotext (poppler).
@@ -338,9 +345,9 @@ def main_content(page):
     return page
 
 
-def kuria_links(path, prefix):
+def kuria_links(path, prefix, page_no=0):
     """[(url, title)] of the items a list page links to, in page order."""
-    page = main_content(fetch(KURIA + path).decode("utf-8", "replace"))
+    page = main_content(fetch(f"{KURIA}{path}?page={page_no}").decode("utf-8", "replace"))
     links = {}
     rx = r'<a[^>]*href="(?:' + re.escape(KURIA) + r')?(' + re.escape(prefix) + r'[^"?#]+)"[^>]*>(.*?)</a>'
     for m in re.finditer(rx, page, re.S):
@@ -370,35 +377,42 @@ def kuria_item(url):
 
 
 def check_kuria_lists(cfg, scorer, seen, cutoff):
-    hits, marked, old = [], {}, False
+    hits, marked = [], {}
     for path, prefix in KURIA_LISTS:
-        for url, title in kuria_links(path, prefix):
-            if url in seen or url in marked:
-                continue
-            if old:  # first run: past the cutoff, the rest of the list is older still
-                marked[url] = ""
-                continue
-            subject, text, date = kuria_item(url)
-            marked[url] = date.isoformat() if date else ""
-            if cutoff and date and date < cutoff.date():
-                old = True
-                continue
-            score, terms = scorer.score(f"{title} {subject}", text)
-            if score < cfg["min_score"]:
-                continue
-            hits.append({
-                "source": "kuria",
-                "id": url,
-                "date": date.isoformat() if date else "",
-                "kind": "Sajtó" if prefix == "/hu/sajto/" else "Jogegységi eljárás",
-                "ref": title,
-                "title": clip(subject, 400),
-                "url": url,
-                "score": score,
-                "strong": score >= cfg["strong_score"],
-                "terms": terms,
-            })
+        # Page back until the list reaches what was seen before, or (first
+        # run) the cutoff: the press list shows five items a page.
         old = False
+        for page_no in range(5):
+            known = False
+            for url, title in kuria_links(path, prefix, page_no):
+                if url in seen or url in marked:
+                    known = True
+                    continue
+                if old:  # past the cutoff, the rest of the list is older still
+                    marked[url] = ""
+                    continue
+                subject, text, date = kuria_item(url)
+                marked[url] = date.isoformat() if date else ""
+                if cutoff and date and date < cutoff.date():
+                    old = True
+                    continue
+                score, terms = scorer.score(f"{title} {subject}", text)
+                if score < cfg["min_score"]:
+                    continue
+                hits.append({
+                    "source": "kuria",
+                    "id": url,
+                    "date": date.isoformat() if date else "",
+                    "kind": "Sajtó" if prefix == "/hu/sajto/" else "Jogegységi eljárás",
+                    "ref": title,
+                    "title": clip(subject, 400),
+                    "url": url,
+                    "score": score,
+                    "strong": score >= cfg["strong_score"],
+                    "terms": terms,
+                })
+            if known or old:
+                break
     return hits, marked
 
 
@@ -502,7 +516,9 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
         url = KURIA + path
         if url in seen:
             continue
-        if cutoff and i > 0:  # first run: only the newest issue
+        # The list carries no dates; with a cutoff, take one monthly issue
+        # per month of the window (a first run: only the newest).
+        if cutoff and i >= max(1, (dt.datetime.now(cutoff.tzinfo) - cutoff).days // 31):
             marked[url] = ""
             continue
         with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
@@ -511,6 +527,12 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
             pages = pdf_columns(tmp.name)
         m = re.search(r"(\d{4})/(\d{2})", pages[0])
         year = m.group(1) if m else ""
+        # The list has no dates, but each file is named for its upload day
+        # ("bh_szeptember_0926.pdf", "bh_januar_20260121.pdf").
+        up = re.search(r"_(\d{4})?(\d{2})(\d{2})(?:_[\d_]*)?\.pdf$", path)
+        published = ""
+        if up and m and abs(int(up.group(2)) - int(m.group(2))) <= 1:
+            published = f"{up.group(1) or year}-{up.group(2)}-{up.group(3)}"
         decisions = journal_decisions(pages)
         if not decisions:
             errors.append(f"Kúriai Döntések, {label.strip()}: nem találtam benne határozatot")
@@ -524,7 +546,7 @@ def check_kuria_journal(cfg, scorer, seen, cutoff, errors):
             hits.append({
                 "source": "kuria_bh",
                 "id": f"{url}#{ref}",
-                "date": f"{year}-{m.group(2)}" if m else "",
+                "date": published or (f"{year}-{m.group(2)}" if m else ""),
                 "issue": f"Kúriai Döntések {year}/{m.group(2) if m else ''} ({label.strip()})",
                 "url": url,
                 "ref": f"BH {year}.{serial}" if serial and year else ref,
@@ -687,6 +709,60 @@ def write_atomic(path, text):
     os.replace(tmp, path)
 
 
+def read_jsonl(path):
+    try:
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    except FileNotFoundError:
+        return []
+
+
+DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "score", "strong",
+                    "issue", "page", "kind", "section", "case", "found")
+
+
+def export(data, out):
+    """Write finds and runs logged since the last export as batch documents.
+
+    Each document stays well under the dashboard database's 256 KiB limit;
+    the page merges every batch and drops repeats by source and id.
+    """
+    state = load_json(data / "state.json", {"seen": {}})
+    after = dt.datetime.fromisoformat(state.get("exported", "1970-01-01T00:00:00+00:00"))
+    is_new = lambda stamp: dt.datetime.fromisoformat(stamp) > after
+    hits = [h for h in read_jsonl(data / "talalatok.jsonl") if is_new(h["found"])]
+    runs = [r for r in read_jsonl(data / "runs.jsonl") if is_new(r["at"])]
+    if not hits and not runs:
+        print("Nincs mit exportálni.")
+        return
+    now = dt.datetime.now(dt.timezone.utc).astimezone()
+    docs, cur, size = [], [], 0
+    for h in hits:
+        row = {"k": h["source"], "id": h["id"],
+               "day": h["date"] if len(h.get("date", "")) == 10 else h["found"][:10]}
+        row.update({f: h[f] for f in DASHBOARD_FIELDS if h.get(f) not in (None, "", [])})
+        if "summary" in row:
+            row["summary"] = clip(row["summary"], 900)
+        if h.get("terms"):
+            row["terms"] = h["terms"][:5]
+        n = len(json.dumps(row, ensure_ascii=False).encode())
+        if cur and size + n > 180_000:
+            docs.append(cur)
+            cur, size = [], 0
+        cur.append(row)
+        size += n
+    docs.append(cur)
+    out.mkdir(parents=True, exist_ok=True)
+    for i, chunk in enumerate(docs):
+        doc = {"at": now.isoformat(timespec="seconds"), "hits": chunk}
+        if i == 0:
+            doc["runs"] = runs
+        path = out / f"{now:%Y%m%dT%H%M%S}-{i}.json"
+        path.write_text(json.dumps(doc, ensure_ascii=False))
+        print(path)
+    state["exported"] = max([h["found"] for h in hits] + [r["at"] for r in runs])
+    write_atomic(data / "state.json", json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True))
+
+
 def score_pdfs(paths, cfg, scorer):
     for path in paths:
         acts = score_acts(kozlony_acts(pdf_text(path)), scorer, cfg)
@@ -707,7 +783,11 @@ def main():
     ap.add_argument("--since", type=int, metavar="DAYS", help="ignore anything unseen that is older than this")
     ap.add_argument("--dry-run", action="store_true", help="print the report, write nothing")
     ap.add_argument("--pdf", type=Path, nargs="+", metavar="FILE", help="score downloaded Közlöny issues and exit")
+    ap.add_argument("--export", type=Path, metavar="DIR", help="write finds since the last export as dashboard batch documents and exit")
     args = ap.parse_args()
+    if args.export:
+        export(args.data, args.export)
+        return 0
 
     cfg = tomllib.loads(args.config.read_text())
     scorer = Scorer(cfg)
@@ -724,6 +804,10 @@ def main():
     # marks and take the source for one that has run before.
     new_sources = {s for s in ("kozlony", "bhgy", "kuria", "kuria_bh", "ab") if s not in state["seen"]}
 
+    # How far back a first run (or --since) looked, per source: the cutoff,
+    # or the oldest item a source still lists where it keeps less than that.
+    coverage = {}
+
     def run(source, check):
         seen = state["seen"].setdefault(source, {})
         days = args.since if args.since is not None else cfg["first_run_days"] if source in new_sources else None
@@ -735,6 +819,10 @@ def main():
             return
         hits.extend(found)
         seen.update(marked)
+        dates = [d for d in marked.values() if len(d) == 10]
+        if cutoff and dates:
+            start = max(cutoff.date().isoformat(), min(dates))
+            coverage[source] = min(coverage.get(source, start), start)
 
     run("kozlony", lambda seen, cutoff: check_kozlony(cfg, scorer, seen, cutoff, errors))
     for query in cfg.get("bhgy", []):
@@ -760,6 +848,14 @@ def main():
         else:
             print("Nincs új találat.")
         write_atomic(args.data / "state.json", json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True))
+        counts = {}
+        for h in hits:
+            counts[h["source"]] = counts.get(h["source"], 0) + 1
+        record = {"at": now.isoformat(timespec="seconds"), "found": counts, "errors": errors}
+        if coverage:
+            record["coverage"] = coverage
+        with open(args.data / "runs.jsonl", "a") as log:
+            log.write(json.dumps(record, ensure_ascii=False) + "\n")
     for e in errors:
         print(f"hiba: {e}", file=sys.stderr)
     return 1 if errors else 0
