@@ -22,9 +22,16 @@ A run writes a Markdown report to `data/jelentesek/`, appends its finds to
 has seen in `data/state.json`. `data/` is local and not in git. A source that
 fails is left unmarked, retried on the next run, and the run exits 1.
 
-`./deploy.sh` with no argument uploads the page (`web/`) as well; `--dry-run`
+`./deploy.sh` with no argument also rebuilds and uploads the page; `--dry-run`
 lists what it would upload. It needs `rclone`, and a `.env` with `FTPhost`,
 `FTPuser` and `FTPpass`.
+
+The page is `web/dashboard.html`, the dashboard alone. `build_page.py` puts it
+inside the chrome of a live amunka.hu page (head, header and menu, footer,
+cookie consent), so it carries the site's current design without a copy of
+it here, and writes `web/index.html`. The folder sits outside Grav: the
+site's rewrite rules serve real folders directly, and the aMunka repo's
+`sync-from-server.sh` excludes it.
 
 Requires Python 3.11+ and poppler (`pdftotext`, `pdfinfo`).
 

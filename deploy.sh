@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Publish the dashboard to https://amunka.hu/jogfigyelo/ over FTP.
 #
-#   ./deploy.sh            export data.json, upload the page and its data
+#   ./deploy.sh            build the page, export data.json, upload both
 #   ./deploy.sh --data     export and upload data.json only (after a run)
-#   ./deploy.sh --dry-run  export, then list what would be uploaded
+#   ./deploy.sh --dry-run  build and export, then list what would be uploaded
+#
+# The page is rebuilt from the live site's chrome on every full deploy
+# (build_page.py), so a change to the site's menu or theme reaches it then.
 #
 # Uploads only add or replace files in /jogfigyelo; nothing on the server is
 # deleted. Credentials come from .env (FTPhost, FTPuser, FTPpass: the same
@@ -28,10 +31,11 @@ export RCLONE_CONFIG_AMUNKA_USER="$(env_get FTPuser)"
 export RCLONE_CONFIG_AMUNKA_PASS="$(env_get FTPpass | rclone obscure -)"
 
 python3 "$ROOT/jogfigyelo.py" --export "$ROOT/web/data.json"
+[ "${1:-}" = "--data" ] || python3 "$ROOT/build_page.py"
 
 case "${1:-}" in
 	--data) rclone copyto "$ROOT/web/data.json" "$REMOTE/data.json" ;;
-	--dry-run) rclone copy "$ROOT/web" "$REMOTE" --dry-run ;;
-	"") rclone copy "$ROOT/web" "$REMOTE" ;;
+	--dry-run) rclone copy "$ROOT/web" "$REMOTE" --exclude dashboard.html --dry-run ;;
+	"") rclone copy "$ROOT/web" "$REMOTE" --exclude dashboard.html ;;
 	*) echo "usage: $0 [--data|--dry-run]" >&2; exit 2 ;;
 esac

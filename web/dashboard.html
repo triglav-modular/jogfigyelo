@@ -1,0 +1,506 @@
+<!--
+  The dashboard's own part of https://amunka.hu/jogfigyelo/. build_page.py
+  puts it inside the live site's page chrome (head, header, footer, scripts)
+  and writes web/index.html; deploy.sh uploads that and data.json. The three
+  parts below are cut out by their markers: keep them.
+-->
+
+<!-- head -->
+<meta name="description" content="Új munkajogi jogszabályok és bírósági döntések a Magyar Közlönyből, a bíróságok határozatgyűjteményéből, a Kúriától és az Alkotmánybíróságtól, naponta frissítve.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="a Munka">
+<meta property="og:locale" content="hu_HU">
+<meta property="og:title" content="Jogfigyelő">
+<meta property="og:description" content="Új munkajogi jogszabályok és bírósági döntések a Magyar Közlönyből, a bíróságok határozatgyűjteményéből, a Kúriától és az Alkotmánybíróságtól.">
+<meta property="og:url" content="https://amunka.hu/jogfigyelo/">
+<meta property="og:image" content="https://amunka.hu/user/themes/antimunka/images/Pecset_A@10x.png">
+<meta property="og:image:width" content="1575">
+<meta property="og:image:height" content="1576">
+<meta property="og:image:alt" content="Az a Munka pecsétje">
+<meta name="twitter:card" content="summary">
+<style>
+/* Built on the site's own tokens and faces (custom.css): --m_red, --m_black,
+   --m_black_text, --m_yellow; Euclid Square, Rubik, Crimson Pro, Space Mono. */
+.jf { max-width: 880px; padding-top: 1.5em; display: grid; gap: 28px; }
+.jf .jf-lede { max-width: 555px; margin: 0; font-size: 1.15em; }
+.jf a { color: var(--m_black_text); text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; }
+.jf a:hover { color: var(--m_red); }
+.jf :focus-visible { outline: 2px solid var(--m_red); outline-offset: 2px; }
+.jf-mono, .jf-label {
+  font-family: "Space Mono", monospace; text-transform: uppercase; letter-spacing: 1.5px;
+  font-weight: 700; font-size: 12px; line-height: 1.4;
+}
+.jf-num { font-family: "Space Mono", monospace; font-variant-numeric: tabular-nums; }
+
+/* Status line */
+.jf-health { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black_text); }
+.jf-status { font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; padding: 2px 8px; border: 2px solid currentColor; }
+.jf-status.ok { color: var(--m_black); }
+.jf-status.bad { color: var(--m_red); }
+.jf-errors { margin: 0; padding: 10px 14px; border-left: 4px solid var(--m_red); font-family: "Space Mono", monospace; font-size: 13px; }
+
+/* Filters: one row above everything they scope */
+.jf-filters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+.jf-btn {
+  font-family: "Space Mono", monospace; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: var(--m_black); background: #fff; border: 2px solid var(--m_black); padding: 5px 10px; cursor: pointer; line-height: 1.3;
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 0;
+}
+.jf-btn[aria-pressed="true"] { background: var(--m_black); color: #fff; }
+.jf-seg { display: inline-flex; }
+.jf-seg .jf-btn + .jf-btn { border-left-width: 0; }
+.jf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#sources .jf-btn[aria-pressed="false"] { color: #9a928c; border-color: #cfc8c1; text-decoration: line-through; }
+.jf-btn .n { font-weight: 400; letter-spacing: 0; }
+.jf-btn:disabled { opacity: 0.45; cursor: default; }
+.jf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--m_red); flex: none; }
+.jf-search {
+  font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black); background: #fff;
+  border: 2px solid var(--m_black); border-radius: 0; padding: 5px 10px; width: 240px; max-width: 100%; min-width: 0;
+}
+
+/* Tiles: the site's thick black rule over each block */
+.jf-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+@media (max-width: 560px) { .jf-tiles { grid-template-columns: 1fr; } }
+.jf-tile { border-top: 6px solid var(--m_black); padding-top: 10px; display: grid; gap: 2px; min-width: 0; }
+.jf-tile-value { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.jf-tile-value b { font-family: "Euclid Square", "Rubik", sans-serif; font-weight: 700; font-size: 56px; line-height: 1; color: var(--m_black); letter-spacing: -0.01em; }
+.jf-tile-value span { font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black_text); }
+.jf-tile-prev { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; min-height: 1.4em; }
+.jf-spark { position: relative; margin-top: 6px; padding-top: 16px; }
+.jf-spark-cols { display: flex; align-items: flex-end; gap: 3px; height: 48px; border-bottom: 2px solid var(--m_black); }
+.jf-spark-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.jf-spark-col i { display: block; width: 100%; max-width: 18px; background: var(--m_black); }
+.jf-spark-col.cur i { background: var(--m_red); }
+.jf-spark-col.nodata { background: repeating-linear-gradient(135deg, transparent 0 4px, #d9d3cd 4px 5px); }
+.jf-spark-col:hover i, .jf-spark-col:focus-visible i { opacity: 0.7; }
+.jf-spark-axis { display: flex; justify-content: space-between; font-family: "Space Mono", monospace; font-size: 11px; color: #6e6660; margin-top: 4px; }
+.jf-spark-max { position: absolute; top: 0; right: 0; font-family: "Space Mono", monospace; font-size: 11px; color: #6e6660; }
+.jf-tip {
+  position: fixed; z-index: 100; pointer-events: none; background: var(--m_black); color: #fff;
+  font-family: "Space Mono", monospace; font-size: 12px; padding: 5px 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px));
+}
+.jf-tip b { margin-right: 6px; }
+.jf-table summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+.jf-table-scroll { overflow-x: auto; margin-top: 10px; }
+.jf-table table { border-collapse: collapse; font-family: "Space Mono", monospace; font-size: 12px; }
+.jf-table th, .jf-table td { padding: 4px 10px; border-bottom: 1px solid #e3ddd7; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.jf-table th:first-child, .jf-table td:first-child { text-align: left; }
+
+/* Feed: stacked dates down the left, as on the site's listing */
+.jf-feed-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 6px solid var(--m_black); padding-bottom: 6px; }
+.jf-feed-head h2 { margin: 0; font-family: "Rubik", sans-serif; font-weight: 700; text-transform: uppercase; font-size: 32px; line-height: 1; letter-spacing: 0; }
+.jf-day { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 0 20px; padding-top: 18px; }
+@media (max-width: 560px) { .jf-day { grid-template-columns: 1fr; } }
+.jf-daydate { position: sticky; top: 10px; align-self: start; display: grid; justify-items: start; }
+.jf-daydate span, .jf-daydate em {
+  font-family: "Euclid Square", "Rubik", sans-serif; font-weight: 700; font-style: normal; font-size: 34px; line-height: 0.95;
+  letter-spacing: 2px; font-variant-numeric: tabular-nums; color: var(--m_black);
+}
+.jf-daydate span { color: var(--m_red); }
+.jf-daydate small { font-family: "Space Mono", monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; color: var(--m_black_text); }
+@media (max-width: 560px) {
+  .jf-daydate { position: static; display: flex; align-items: baseline; gap: 8px; }
+  .jf-daydate span, .jf-daydate em { font-size: 26px; }
+}
+.jf-items { display: grid; }
+.jf-item { display: grid; gap: 4px; padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid #e3ddd7; min-width: 0; }
+.jf-item:last-child { border-bottom: 0; }
+.jf-src { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.jf-src .jf-label { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.jf-src .jf-page { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
+.jf-refs { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; }
+.jf-ref { font-family: "Space Mono", monospace; font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.jf-court { font-family: "Rubik", sans-serif; font-weight: 600; font-size: 15px; }
+.jf .jf-title { margin: 0; font-size: 1.12em; line-height: 1.4; text-align: left; hyphens: manual; }
+.jf .jf-summary { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.jf .jf-summary.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.jf-more { font-family: "Space Mono", monospace; font-size: 12px; color: var(--m_black_text); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--m_red); text-underline-offset: 3px; justify-self: start; }
+.jf-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
+.jf-pill { font-family: "Space Mono", monospace; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 7px; white-space: nowrap; }
+.jf-pill.strong { background: var(--m_yellow); color: var(--m_black); }
+.jf-pill.maybe { box-shadow: inset 0 0 0 2px #cfc8c1; color: var(--m_black_text); }
+.jf-pill.new { background: var(--m_red); color: #fff; }
+.jf-empty { margin: 0; padding: 20px 0; }
+.jf-loadmore { justify-self: start; }
+.jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
+</style>
+<!-- /head -->
+
+<!-- body -->
+<section id="body" class="">
+  <div id="breadcrumbs">
+    <span><a href="/"><span>a munka</span></a> <i class="fa fa-angle-right"></i></span>
+    <span><span>Jogfigyelő</span></span>
+  </div>
+  <div class="blog-content-item grid pure-g-r">
+    <div id="item" class="block pure-u-2-3 h-entry">
+      <div class="list-item h-entry">
+        <div class="list-blog-header">
+          <span class="list-blog-date"><time class="dt-published" id="jf-date"><span>&nbsp;</span><em>&nbsp;</em></time></span>
+          <h4 class="p-name"><a href="/jogfigyelo/" class="u-url">Jogfigyelő</a></h4>
+          <div class="svgtext" aria-hidden="true">
+            <svg width="2096" height="1542" viewBox="0 0 1596 1242" xmlns="http://www.w3.org/2000/svg">
+              <path fill="none" id="ellipsepath" d="M119.261 2.65821C46.7962 101.631 4.49998 220.851 4.49997 349.158C4.49994 692.127 306.708 970.158 679.5 970.158C1052.29 970.158 1354.5 692.127 1354.5 349.158" stroke="black" stroke-width="0"/>
+              <text><textPath href="#ellipsepath" id="titlepath" startOffset="820">Jogfigyelő</textPath></text>
+            </svg>
+          </div>
+        </div>
+        <div class="list-blog-padding">
+          <div class="e-content jf" id="jf">
+            <p class="jf-lede">Új munkajogi jogszabályok és bírósági döntések a Magyar Közlönyből, a bíróságok határozatgyűjteményéből, a Kúriától és az Alkotmánybíróságtól. A figyelő naponta néz rá a forrásokra.</p>
+            <div class="jf-health" id="health"><span>Betöltés…</span></div>
+            <div id="errors"></div>
+
+            <div class="jf-filters" role="group" aria-label="Szűrők">
+              <div class="jf-seg" id="range" role="group" aria-label="Időszak">
+                <button type="button" class="jf-btn" data-days="7" aria-pressed="false">7 nap</button>
+                <button type="button" class="jf-btn" data-days="30" aria-pressed="true">30 nap</button>
+                <button type="button" class="jf-btn" data-days="90" aria-pressed="false">90 nap</button>
+                <button type="button" class="jf-btn" data-days="0" aria-pressed="false">Mind</button>
+              </div>
+              <div class="jf-chips" id="sources" role="group" aria-label="Források"></div>
+              <button type="button" class="jf-btn" id="onlyNew" aria-pressed="false"><span class="jf-dot" aria-hidden="true"></span>Csak az újak <span class="n" id="newCount">0</span></button>
+              <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
+            </div>
+
+            <section class="jf-tiles" id="tiles" aria-label="Összesítés forrásonként"></section>
+            <details class="jf-table">
+              <summary>Heti számok táblázatban</summary>
+              <div class="jf-table-scroll" id="weekTable"></div>
+            </details>
+
+            <section aria-labelledby="feedTitle">
+              <div class="jf-feed-head"><h2 id="feedTitle">Találatok</h2><span class="jf-label" id="feedCount"></span></div>
+              <div id="feed"><p class="jf-empty">Betöltés…</p></div>
+            </section>
+
+            <p class="jf-foot">A Közlöny aktusait a figyelő kulcsszavak sűrűsége alapján pontozza; az „erős” jelölés ezt a pontszámot mutatja, nem jogi értékelést. A munkaügyi kollégium minden új határozata megjelenik.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="sidebar" class="block pure-u-1-3 toc-sidebar-wrap"></div>
+  </div>
+</section>
+<div class="jf-tip" id="tip" hidden></div>
+<!-- /body -->
+
+<!-- script -->
+<script>
+(function () {
+  "use strict";
+
+  const GROUPS = [
+    { key: "kozlony", name: "Magyar Közlöny", unit: "jogszabály", sources: ["kozlony"] },
+    { key: "bhgy", name: "Bírósági határozatok", unit: "határozat", sources: ["bhgy"] },
+    { key: "kuria", name: "Kúria", unit: "döntés", sources: ["kuria", "kuria_bh"] },
+    { key: "ab", name: "Alkotmánybíróság", unit: "döntés", sources: ["ab"] },
+  ];
+  const GROUP_OF = {};
+  GROUPS.forEach(g => g.sources.forEach(s => { GROUP_OF[s] = g.key; }));
+  const MON3 = ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."];
+  const WEEKDAYS = ["vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat"];
+  const PAGE = 120;
+
+  // Per-browser conveniences only: the last visit and the chosen filters.
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } },
+  };
+  const prevSeen = store.get("jf.lastSeen");
+  const markSeen = () => store.set("jf.lastSeen", new Date().toISOString());
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") markSeen(); });
+  window.addEventListener("pagehide", markSeen);
+
+  const ui = { days: Number(store.get("jf.days") || 30), groups: new Set(GROUPS.map(g => g.key)), onlyNew: false, q: "", shown: PAGE };
+  if (![0, 7, 30, 90].includes(ui.days)) ui.days = 30;
+  try {
+    const saved = JSON.parse(store.get("jf.groups") || "null");
+    if (Array.isArray(saved) && saved.length) ui.groups = new Set(saved.filter(k => GROUPS.some(g => g.key === k)));
+  } catch (e) { /* keep defaults */ }
+
+  let hits = [], runs = [], coverage = {}, loaded = false;
+
+  const $ = id => document.getElementById(id);
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  function safeUrl(u) { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : null; } catch (e) { return null; } }
+  function link(text, url, cls) { const href = safeUrl(url); return href ? el("a", { href, target: "_blank", rel: "noopener", class: cls, text }) : null; }
+  function parseDay(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function monday(d) { const x = startOfDay(d); return addDays(x, -((x.getDay() + 6) % 7)); }
+  function isoWeek(d) {
+    const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
+    return Math.ceil(((x - new Date(Date.UTC(x.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7);
+  }
+  const two = n => String(n).padStart(2, "0");
+  const short = d => `${MON3[d.getMonth()]} ${d.getDate()}.`;
+  function stamp(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : `${d.getFullYear()}. ${MON3[d.getMonth()]} ${d.getDate()}. ${two(d.getHours())}:${two(d.getMinutes())}`;
+  }
+  const fold = s => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const isNew = h => !!prevSeen && !!h.found && Date.parse(h.found) > Date.parse(prevSeen);
+
+  function ingest(docs) {
+    const byKey = new Map(), allRuns = [];
+    docs.forEach(doc => {
+      (Array.isArray(doc.hits) ? doc.hits : []).forEach(h => {
+        if (!h || typeof h !== "object" || !h.k || !h.id) return;
+        const d = parseDay(h.day);
+        if (!d) return;
+        byKey.set(h.k + "|" + h.id, Object.assign({}, h, { _d: d, _g: GROUP_OF[h.k] || "other",
+          _text: fold([h.ref, h.title, h.summary, h.court, h.label, h.issue, h.kind, h.section, h.case].filter(Boolean).join(" ")) }));
+      });
+      (Array.isArray(doc.runs) ? doc.runs : []).forEach(r => { if (r && r.at) allRuns.push(r); });
+    });
+    hits = Array.from(byKey.values()).sort((a, b) => b._d - a._d || String(b.found || "").localeCompare(String(a.found || "")));
+    runs = allRuns.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    coverage = {};
+    runs.forEach(r => {
+      if (!r.coverage) return;
+      for (const [src, day] of Object.entries(r.coverage)) {
+        const g = GROUP_OF[src], d = parseDay(day);
+        if (g && d && (!coverage[g] || d < coverage[g])) coverage[g] = d;
+      }
+    });
+    loaded = true;
+    render();
+  }
+
+  const inRange = (h, from, to) => h._d >= from && h._d < to;
+  function rangeBounds(days) {
+    const end = addDays(startOfDay(new Date()), 1);
+    return days ? [addDays(end, -days), end] : [new Date(0), end];
+  }
+
+  function renderHealth() {
+    const box = $("health"); box.replaceChildren();
+    const errBox = $("errors"); errBox.replaceChildren();
+    if (!loaded) { box.append(el("span", { text: "Betöltés…" })); return; }
+    const last = runs[0];
+    if (!last) { box.append(el("span", { text: "Még nem futott ellenőrzés." })); return; }
+    const at = new Date(last.at);
+    if (!isNaN(at)) $("jf-date").replaceChildren(el("span", { text: two(at.getMonth() + 1) }), el("em", { text: two(at.getDate()) }));
+    box.append(el("span", {}, "Utoljára ellenőrizve: ", stamp(last.at)));
+    const errs = Array.isArray(last.errors) ? last.errors : [];
+    if (errs.length) {
+      box.append(el("span", { class: "jf-status bad" }, `! ${errs.length} forrás hibával`));
+      errBox.append(el("ul", { class: "jf-errors", "aria-label": "Az utolsó ellenőrzés hibái" }, errs.map(e => el("li", { text: String(e) }))));
+    } else {
+      box.append(el("span", { class: "jf-status ok" }, "✓ minden forrás rendben"));
+    }
+  }
+
+  function renderFilters() {
+    document.querySelectorAll("#range button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.days) === ui.days)));
+    const box = $("sources"); box.replaceChildren();
+    const [from, to] = rangeBounds(ui.days);
+    GROUPS.forEach(g => {
+      const n = hits.filter(h => h._g === g.key && inRange(h, from, to)).length;
+      box.append(el("button", {
+        type: "button", class: "jf-btn", "aria-pressed": String(ui.groups.has(g.key)),
+        onclick: () => {
+          if (ui.groups.has(g.key)) ui.groups.delete(g.key); else ui.groups.add(g.key);
+          store.set("jf.groups", JSON.stringify(Array.from(ui.groups)));
+          ui.shown = PAGE; render();
+        },
+      }, g.name, el("span", { class: "n", text: String(n) })));
+    });
+    const newN = hits.filter(isNew).length;
+    $("newCount").textContent = String(newN);
+    $("onlyNew").setAttribute("aria-pressed", String(ui.onlyNew));
+    $("onlyNew").disabled = !newN && !ui.onlyNew;
+    $("onlyNew").title = prevSeen ? `Az előző látogatásod (${stamp(prevSeen)}) óta talált tételek` : "Az első látogatás után jelöli az újonnan talált tételeket";
+  }
+
+  function renderTiles() {
+    const box = $("tiles"); box.replaceChildren();
+    if (!loaded) {
+      GROUPS.forEach(g => box.append(el("article", { class: "jf-tile" }, el("div", { class: "jf-label", text: g.name }),
+        el("div", { class: "jf-tile-value" }, el("b", { text: "–" })), el("div", { class: "jf-tile-prev", text: " " }))));
+      return;
+    }
+    const [from, to] = rangeBounds(ui.days);
+    const weeks = [], thisMon = monday(new Date());
+    for (let i = 11; i >= 0; i--) weeks.push(addDays(thisMon, -7 * i));
+    const table = [];
+    GROUPS.forEach(g => {
+      const mine = hits.filter(h => h._g === g.key);
+      const value = mine.filter(h => inRange(h, from, to)).length;
+      const prev = ui.days ? mine.filter(h => inRange(h, addDays(from, -ui.days), from)).length : null;
+      const cov = coverage[g.key];
+      const counts = weeks.map(w => {
+        const end = addDays(w, 7);
+        return { w, n: !cov || end > cov ? mine.filter(h => inRange(h, w, end)).length : null };
+      });
+      const max = Math.max(1, ...counts.map(c => c.n || 0));
+      table.push(counts);
+      const cols = counts.map((c, i) => {
+        const label = `${isoWeek(c.w)}. hét (${short(c.w)}–${short(addDays(c.w, 6))})`;
+        const tipText = c.n == null ? "nincs adat: a figyelő eddig nem lát vissza" : `${c.n} ${g.unit}`;
+        const col = el("div", {
+          class: "jf-spark-col" + (i === counts.length - 1 ? " cur" : "") + (c.n == null ? " nodata" : ""),
+          tabindex: "0", role: "img", "aria-label": `${g.name}, ${label}: ${tipText}`,
+        }, el("i", { style: c.n == null ? null : `height:${c.n ? Math.max(6, (100 * c.n) / max) : 0}%` }));
+        const show = () => showTip(col, tipText, label);
+        col.addEventListener("pointermove", show);
+        col.addEventListener("focus", show);
+        col.addEventListener("pointerleave", hideTip);
+        col.addEventListener("blur", hideTip);
+        return col;
+      });
+      box.append(el("article", { class: "jf-tile" },
+        el("div", { class: "jf-label", text: g.name }),
+        el("div", { class: "jf-tile-value" }, el("b", { text: String(value) }), el("span", { text: `${g.unit} · ${ui.days ? ui.days + " nap" : "összesen"}` })),
+        el("div", { class: "jf-tile-prev", text: prev == null ? " " : `előző ${ui.days} nap: ${prev}` }),
+        el("div", { class: "jf-spark" },
+          el("span", { class: "jf-spark-max", text: `max. ${max}/hét` }),
+          el("div", { class: "jf-spark-cols" }, cols),
+          el("div", { class: "jf-spark-axis" }, el("span", { text: short(weeks[0]) }), el("span", { text: "e hét" })))));
+    });
+    $("weekTable").replaceChildren(el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "Hét" }), GROUPS.map(g => el("th", { text: g.name })))),
+      el("tbody", {}, weeks.map((w, i) => el("tr", {},
+        el("td", { text: `${isoWeek(w)}. hét, ${short(w)}–${short(addDays(w, 6))}` }),
+        table.map(counts => el("td", { text: counts[i].n == null ? "–" : String(counts[i].n) })))))));
+  }
+
+  const tip = $("tip");
+  function showTip(target, value, label) {
+    tip.replaceChildren(el("b", { text: value }), el("span", { text: label }));
+    const r = target.getBoundingClientRect();
+    tip.style.left = `${Math.min(Math.max(r.left + r.width / 2, 110), window.innerWidth - 110)}px`;
+    tip.style.top = `${r.top}px`;
+    tip.hidden = false;
+  }
+  function hideTip() { tip.hidden = true; }
+  window.addEventListener("scroll", hideTip, { passive: true });
+
+  function sourceTag(h) {
+    if (h.k === "kozlony") return "Magyar Közlöny";
+    if (h.k === "bhgy") return h.label || "Bírósági határozat";
+    if (h.k === "kuria") return h.kind === "Sajtó" ? "Kúria · sajtó" : "Kúria · jogegység";
+    if (h.k === "kuria_bh") return "Kúriai Döntések";
+    if (h.k === "ab") return "Alkotmánybíróság";
+    return h.k;
+  }
+  function summaryBlock(text) {
+    const p = el("p", { class: "jf-summary clamp", text });
+    if (text.length < 300) { p.classList.remove("clamp"); return [p]; }
+    const btn = el("button", { type: "button", class: "jf-more", "aria-expanded": "false", text: "Teljes szöveg" });
+    btn.addEventListener("click", () => {
+      const clamped = p.classList.toggle("clamp");
+      btn.setAttribute("aria-expanded", String(!clamped));
+      btn.textContent = clamped ? "Teljes szöveg" : "Kevesebb";
+    });
+    return [p, btn];
+  }
+  function scorePill(h) {
+    if (h.score == null) return null;
+    return el("span", { class: "jf-pill " + (h.strong ? "strong" : "maybe"), title: `Kulcsszó-pontszám: ${h.score}`, text: `${h.strong ? "erős" : "lehetséges"} · ${h.score}` });
+  }
+  const terms = h => h.terms && h.terms.length ? el("span", { text: h.terms.slice(0, 4).join(", ") }) : null;
+
+  function itemNode(group) {
+    const h = group[0], fresh = group.some(isNew);
+    const src = el("div", { class: "jf-src" }, el("span", { class: "jf-label", text: sourceTag(h) }),
+      fresh ? el("span", { class: "jf-pill new", title: "Új az előző látogatásod óta", text: "új" }) : null,
+      h.k === "kozlony" && h.page ? el("span", { class: "jf-page", text: `${h.page}. oldal` }) : null);
+    const kids = [src];
+    if (h.k === "kozlony") {
+      kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" })));
+      if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
+      kids.push(el("div", { class: "jf-meta" }, scorePill(h), link(h.issue || "Közlöny", h.url), link("PDF", h.pdf), terms(h)));
+    } else if (h.k === "bhgy") {
+      kids.push(el("div", { class: "jf-refs" }, group.map((x, i) => el("span", {},
+        i === 0 || x.court !== group[i - 1].court ? el("span", { class: "jf-court", text: (x.court || "") + " " }) : null,
+        link(x.ref || "határozat", x.pdf, "jf-ref") || el("span", { class: "jf-ref", text: x.ref || "" })))));
+      if (h.summary) kids.push(...summaryBlock(h.summary));
+      kids.push(el("div", { class: "jf-meta" }, group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null));
+    } else if (h.k === "kuria") {
+      kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-court", text: h.ref || "" })));
+      if (h.title) kids.push(...summaryBlock(h.title));
+      kids.push(el("div", { class: "jf-meta" }, scorePill(h), link("A Kúria oldalán", h.url), terms(h)));
+    } else if (h.k === "kuria_bh") {
+      kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-page", text: h.case || "" })));
+      if (h.title) kids.push(...summaryBlock(h.title));
+      kids.push(el("div", { class: "jf-meta" }, h.section ? el("span", { text: h.section }) : null, link(h.issue || "Lapszám (PDF)", h.url)));
+    } else if (h.k === "ab") {
+      kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-court", text: h.kind || "" })));
+      if (h.title) kids.push(...summaryBlock(h.title));
+      kids.push(el("div", { class: "jf-meta" }, link("Döntés (PDF)", h.pdf), link("Adatlap", h.url), terms(h)));
+    }
+    return el("article", { class: "jf-item" }, kids);
+  }
+
+  function dayDate(d) {
+    const today = startOfDay(new Date()), diff = Math.round((today - d) / 86400000);
+    const note = diff === 0 ? "ma" : diff === 1 ? "tegnap" : WEEKDAYS[d.getDay()];
+    return el("div", { class: "jf-daydate", "aria-label": `${d.getFullYear()}. ${MON3[d.getMonth()]} ${d.getDate()}., ${WEEKDAYS[d.getDay()]}` },
+      el("span", { text: two(d.getMonth() + 1) }), el("em", { text: two(d.getDate()) }), el("small", { text: note }));
+  }
+
+  function renderFeed() {
+    if (!loaded) return;
+    const feed = $("feed");
+    const [from, to] = rangeBounds(ui.days);
+    const q = fold(ui.q.trim());
+    const list = hits.filter(h => ui.groups.has(h._g) && inRange(h, from, to) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
+    // Parallel cases often repeat one principle word for word: show them once.
+    const groups = [], same = new Map();
+    list.forEach(h => {
+      const key = h.k === "bhgy" && h.summary ? "s|" + fold(h.summary).slice(0, 200) : "i|" + h.k + "|" + h.id;
+      if (same.has(key)) same.get(key).push(h); else { const g = [h]; same.set(key, g); groups.push(g); }
+    });
+    $("feedCount").textContent = list.length ? `${list.length} tétel` : "";
+    if (!hits.length) { feed.replaceChildren(el("p", { class: "jf-empty", text: "Még nincs adat." })); return; }
+    if (!groups.length) { feed.replaceChildren(el("p", { class: "jf-empty", text: "Ebben a szűrésben nincs találat. Válassz hosszabb időszakot vagy több forrást." })); return; }
+    const out = []; let cur = null, items = null;
+    groups.slice(0, ui.shown).forEach(g => {
+      if (g[0]._d.getTime() !== cur) {
+        cur = g[0]._d.getTime();
+        items = el("div", { class: "jf-items" });
+        out.push(el("section", { class: "jf-day" }, dayDate(g[0]._d), items));
+      }
+      items.append(itemNode(g));
+    });
+    if (groups.length > ui.shown) {
+      out.push(el("button", { type: "button", class: "jf-btn jf-loadmore", onclick: () => { ui.shown += PAGE; renderFeed(); },
+        text: `További ${Math.min(PAGE, groups.length - ui.shown)} bejegyzés` }));
+    }
+    feed.replaceChildren(...out);
+  }
+
+  function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
+
+  document.querySelectorAll("#range button").forEach(b => b.addEventListener("click", () => {
+    ui.days = Number(b.dataset.days); ui.shown = PAGE; store.set("jf.days", String(ui.days)); render();
+  }));
+  $("onlyNew").addEventListener("click", () => { ui.onlyNew = !ui.onlyNew; ui.shown = PAGE; render(); });
+  let qTimer = null;
+  $("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { ui.q = e.target.value; ui.shown = PAGE; renderFeed(); }, 150); });
+
+  render();
+
+  // data.json sits beside this page and is rewritten after every run.
+  fetch("data.json", { cache: "no-cache" })
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(doc => ingest([doc]))
+    .catch(e => { loaded = true; render(); $("feed").replaceChildren(el("p", { class: "jf-empty", text: `Az adatok nem töltődtek be (${e.message}). Töltsd újra az oldalt.` })); });
+})();
+</script>
+<!-- /script -->
