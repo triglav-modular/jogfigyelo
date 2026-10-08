@@ -209,7 +209,7 @@
               <div id="feed"><p class="jf-empty">Betöltés…</p></div>
             </section>
 
-            <p class="jf-foot">A Közlönyből azok a jogszabályok jelennek meg, amelyek az alap munkajogi törvénycsomag valamely törvényét módosítják (a szakaszok súlya szerint), vagy amelyek címe munkajogi tárgyú. A munkaügyi kollégium minden új határozata megjelenik. A technikai tételek (csak szövegcsere, eljárási végzés) alapból rejtve vannak, hacsak az összefoglaló nem érdeminek olvassa őket. Az összefoglaló automatikusan készül a határozat vagy a jogszabály szövegéből, a módosított szakaszok korábbi szövegét a Nemzeti Jogszabálytárból véve; tévedhet, a forrás szövege az irányadó.</p>
+            <p class="jf-foot">A Közlönyből azok a jogszabályok jelennek meg, amelyek az alap munkajogi törvénycsomag valamely törvényét módosítják (a szakaszok súlya szerint), vagy amelyek címe munkajogi tárgyú. A munkaügyi kollégium minden új határozata megjelenik. A technikai tételek (csak szövegcsere, eljárási végzés) alapból rejtve vannak; a jogszabályok közül az is látszik, amelyet az összefoglaló érdeminek olvas. Az összefoglaló automatikusan készül a határozat vagy a jogszabály szövegéből, a módosított szakaszok korábbi szövegét a Nemzeti Jogszabálytárból véve; tévedhet, a forrás szövege az irányadó.</p>
           </div>
         </div>
       </div>
@@ -319,8 +319,9 @@
   }
 
   const inRange = (h, from, to) => h._d >= from && h._d < to;
-  // Technical by the rules is hidden, unless the summary reads the entry as substantive.
-  const hiddenTech = h => !!h.technical && !(h.ai && h.ai.technical === false);
+  // Technical by the rules is hidden. The summary can overrule that for a gazette
+  // act (an annulled phrase can change a right); a court order's flag stands.
+  const hiddenTech = h => !!h.technical && !(h.k === "kozlony" && h.ai && h.ai.technical === false);
   const visible = h => ui.showTech || !hiddenTech(h);
   function rangeBounds(days) {
     const end = addDays(startOfDay(new Date()), 1);
@@ -489,7 +490,8 @@
     if (changes.length) kids.push(el("ul", {}, changes.map(c => el("li", {}, el("b", { text: c.where }),
       c.before ? `Eddig: ${c.before} ` : "", `Mostantól: ${c.after || ""}`))));
     const why = [a.importance_reason];
-    if (a.technical !== !!h.technical) why.push(a.technical ? `Technikai: ${a.technical_reason || ""}` : `A szabály technikainak jelölte, de érdemi: ${a.technical_reason || ""}`);
+    if (a.technical && !h.technical) why.push(`Technikai: ${a.technical_reason || ""}`);
+    if (!a.technical && h.technical && h.k === "kozlony") why.push(`A szabály technikainak jelölte, de érdemi: ${a.technical_reason || ""}`);
     kids.push(el("p", { class: "why", text: why.filter(Boolean).join(" ") }));
     return el("div", { class: "jf-ai" }, kids);
   }

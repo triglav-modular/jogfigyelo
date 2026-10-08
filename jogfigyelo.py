@@ -988,8 +988,14 @@ AI_FIELDS = ("impact", "importance", "importance_reason", "changes", "technical"
 
 
 def hidden(row):
-    """Hidden by default: technical by the rules, unless the summary reads it as substantive."""
-    return bool(row.get("technical")) and not (row.get("ai") and row["ai"]["technical"] is False)
+    """Hidden by default: technical by the rules.
+
+    For a gazette act the summary can overrule them: "szövegrész" also marks
+    an annulled phrase that changes a right. A court order's flag comes from
+    its case type and outcome and stands.
+    """
+    rescued = row["k"] == "kozlony" and row.get("ai") and row["ai"]["technical"] is False
+    return bool(row.get("technical")) and not rescued
 
 
 def export(data, out):
@@ -1104,8 +1110,10 @@ def feed_entry(h):
         if a.get("changes"):
             body.append("<ul>" + "".join(f'<li><b>{e(c["where"])}:</b> ' + (f'eddig: {e(c["before"])} ' if c["before"] else "")
                                          + f'mostantól: {e(c["after"])}</li>' for c in a["changes"]) + "</ul>")
-        if a["technical"] != bool(h.get("technical")):
-            para(a["technical_reason"], "Az összefoglaló szerint " + ("technikai" if a["technical"] else "érdemi"))
+        if a["technical"] and not h.get("technical"):
+            para(a["technical_reason"], "Az összefoglaló szerint technikai")
+        elif not a["technical"] and h.get("technical") and h["k"] == "kozlony":
+            para(a["technical_reason"], "Az összefoglaló szerint érdemi")
     return title, link or SITE, tags, "".join(body)
 
 

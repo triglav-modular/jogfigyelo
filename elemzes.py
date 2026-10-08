@@ -37,6 +37,7 @@ import sys
 import tempfile
 import time
 import tomllib
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -264,10 +265,16 @@ def decision_request(h):
         lines.append(f"Elvi tartalom (a bíróság összefoglalója): {h['summary']}")
     if h.get("outcome"):
         lines.append(f"Rendelkező rész: {h['outcome']}")
-    if k in ("bhgy", "ab") and h.get("pdf"):
-        lines.append(f"\nA határozat teljes szövege:\n{jf.squash(jf.fetch_pdf_text(h['pdf'], layout=False))}")
-    elif k == "kuria" and h.get("url"):
-        lines.append(f"\nAz oldal szövege:\n{jf.strip_tags(jf.main_content(jf.fetch(h['url']).decode('utf-8', 'replace')))}")
+    try:
+        if k in ("bhgy", "ab") and h.get("pdf"):
+            lines.append(f"\nA határozat teljes szövege:\n{jf.squash(jf.fetch_pdf_text(h['pdf'], layout=False))}")
+        elif k == "kuria" and h.get("url"):
+            lines.append(f"\nAz oldal szövege:\n{jf.strip_tags(jf.main_content(jf.fetch(h['url']).decode('utf-8', 'replace')))}")
+    except urllib.error.HTTPError as e:
+        if e.code not in (404, 410):
+            raise  # tried again on the next run
+        # Gone for good: what was kept when it was found is all there is.
+        lines.append("\nA teljes szöveg már nem érhető el a forrásnál; csak a fenti adatok állnak rendelkezésre.")
     # Kúriai Döntések: the headnote and the operative part above are what the
     # journal's issue gives for one decision.
     return "\n".join(lines)
