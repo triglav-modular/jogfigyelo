@@ -257,6 +257,35 @@ def request_text(h, package, data):
 
 # --- Asking ------------------------------------------------------------------
 
+MAX_SENTENCES = 3
+SHORTEN = """\
+Rewrite this Hungarian summary in at most three sentences. Keep what it says \
+and its plain language; drop repetition and detail first."""
+
+
+def sentences(text):
+    """Sentences in a summary, counted generously: "30/2015. BM" counts as a
+    break, so an abbreviation can only cause an unneeded shortening, never let
+    a long summary through."""
+    return len([x for x in re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ„])", text.strip()) if x])
+
+
+def shorten(client, impact, usage):
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=4000,
+        system=SHORTEN,
+        messages=[{"role": "user", "content": impact}],
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": {
+            "type": "object", "properties": {"impact": {"type": "string"}},
+            "required": ["impact"], "additionalProperties": False}}},
+    )
+    usage["input"] += resp.usage.input_tokens
+    usage["output"] += resp.usage.output_tokens
+    if resp.stop_reason != "end_turn":
+        return impact
+    return json.loads(next(b.text for b in resp.content if b.type == "text"))["impact"]
+
 def ask(client, text):
     """One request; the parsed answer, or a record of why there is none."""
     import anthropic
@@ -278,6 +307,8 @@ def ask(client, text):
     if resp.stop_reason == "max_tokens":
         return None, "a válasz elérte a max_tokens korlátot"
     answer = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    if sentences(answer["impact"]) > MAX_SENTENCES:
+        answer["impact"] = shorten(client, answer["impact"], usage)
     return dict(answer, usage=usage), None
 
 
@@ -297,7 +328,10 @@ def main():
 
     package = jf.Package(tomllib.loads((jf.HERE / "torvenyek.toml").read_text()))
     out = args.data / "elemzesek.jsonl"
-    done = {(a["source"], a["id"]) for a in jf.read_jsonl(out) if a.get("v") == VERSION}
+    # The latest answer per find counts; one over the length limit is asked again.
+    latest = {(a["source"], a["id"]): a for a in jf.read_jsonl(out)}
+    done = {k for k, a in latest.items()
+            if a.get("refused") or (a.get("v") == VERSION and sentences(a.get("impact", "")) <= MAX_SENTENCES)}
     todo = [h for h in latest_finds(args.data) if (h["source"], h["id"]) not in done][:args.limit]
     errors = []
 
