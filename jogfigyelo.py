@@ -1021,11 +1021,10 @@ def export(data, out):
 SITE = "https://amunka.hu/jogfigyelo/"
 FEED_ITEMS = 100
 BUDAPEST = zoneinfo.ZoneInfo("Europe/Budapest")
-HU_MONTHS = ("január", "február", "március", "április", "május", "június",
-             "július", "augusztus", "szeptember", "október", "november", "december")
 
 
-def hu_date(day):
+def spelled_date(day):
+    """2026-09-15 as "2026. szeptember 15.": the reverse of hu_date."""
     y, m, d = (int(x) for x in day[:10].split("-"))
     return f"{y}. {HU_MONTHS[m - 1]} {d}."
 
@@ -1049,7 +1048,7 @@ def feed_entry(h):
         if h.get("outcome"):
             label = (h.get("form") or "döntés").capitalize()
             if len(h.get("decided", "")) == 10:
-                label += f", {hu_date(h['decided'])}"
+                label += f", {spelled_date(h['decided'])}"
             para(h["outcome"], label)
 
     if k == "kozlony":
