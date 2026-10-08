@@ -40,8 +40,8 @@ git -C data add -A && git -C data commit -m Futás && git -C data push
 
 `elemzes.py` sends each new find to Claude Haiku (`claude-haiku-5-5`) with its
 full text: the decision's PDF, the Kúria's page, or the gazette act re-read
-from its issue. The answer is a summary of at most three sentences (what it
-means for workers; for a gazette act, what the rule said and says now) and a
+from its issue. The answer is a one-sentence summary of at most about 30 words
+(what changes for workers; for a gazette act, what the rule now says) and a
 second opinion on whether it is only technical. A gazette act the rules mark
 technical stays visible when the summary reads it as substantive. Changing
 what is asked means bumping `VERSION` in `elemzes.py`: the next run then

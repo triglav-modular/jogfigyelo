@@ -6,8 +6,8 @@ DATA/elemzesek.jsonl, the source is read in full (the decision's PDF, the
 Kúria's page, the gazette act re-read from its issue) and sent to Claude
 Haiku in one request, which answers with:
 
-  impact      the summary, at most three sentences: what it means for
-              workers; for a gazette act, what the rule said and says now
+  impact      the summary, one short sentence: what changes for workers;
+              for a gazette act, what the rule now says
   technical   whether it is only technical
 
 The answer is appended to DATA/elemzesek.jsonl, and jogfigyelo.py --export
@@ -50,7 +50,7 @@ WORKERS = 4
 
 # Bumped when what is asked changes; finds summarised under an older version
 # are summarised again on the next run.
-VERSION = 2
+VERSION = 3
 
 SYSTEM = """\
 You summarise new Hungarian labour-law material for a Munka (amunka.hu), a \
@@ -63,14 +63,13 @@ only where there is no plain word for it. Work only from the text you are \
 given. Do not add facts, section contents or case law from memory. Where the \
 text does not say something, leave it out rather than guess.
 
-impact: the summary, at most three sentences. Say who is affected (which \
-workers, employers or sector) and what changes for them in practice. For a \
-gazette act that amends the followed statutes listed in the request, say what \
-the rule said before and what it says now, taking the earlier rule from the \
-current text supplied with it; if no current text is supplied, or it already \
-reads like the new wording, say only what the rule says now. For a court \
-decision, give the general point a worker in a similar situation can rely on, \
-not the story of the parties. Do not rate how important it is.
+impact: the summary, one short sentence of at most 30 words, with no \
+semicolons or lists. Say what changes for workers, and for whom. For a \
+gazette act that amends the followed statutes listed in the request, say \
+what the rule now says, and what it said before where that fits, taking the \
+earlier rule from the current text supplied with it. For a court decision, \
+give the general point a worker in a similar situation can rely on, not the \
+story of the parties. Do not rate how important it is.
 
 technical: true when it changes nothing of substance in workers' rights and \
 duties: only swapping wording, renaming bodies, moving competences between \
@@ -257,10 +256,11 @@ def request_text(h, package, data):
 
 # --- Asking ------------------------------------------------------------------
 
-MAX_SENTENCES = 3
+MAX_SENTENCES = 1
+MAX_WORDS = 40  # the prompt asks for 30; this leaves room before asking again
 SHORTEN = """\
-Rewrite this Hungarian summary in at most three sentences. Keep what it says \
-and its plain language; drop repetition and detail first."""
+Rewrite this Hungarian summary as one short sentence of at most 30 words, with \
+no semicolons or lists. Keep its main point and its plain language."""
 
 
 def sentences(text):
@@ -268,6 +268,10 @@ def sentences(text):
     break, so an abbreviation can only cause an unneeded shortening, never let
     a long summary through."""
     return len([x for x in re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ„])", text.strip()) if x])
+
+
+def too_long(text):
+    return sentences(text) > MAX_SENTENCES or len(text.split()) > MAX_WORDS
 
 
 def shorten(client, impact, usage):
@@ -307,7 +311,7 @@ def ask(client, text):
     if resp.stop_reason == "max_tokens":
         return None, "a válasz elérte a max_tokens korlátot"
     answer = json.loads(next(b.text for b in resp.content if b.type == "text"))
-    if sentences(answer["impact"]) > MAX_SENTENCES:
+    if too_long(answer["impact"]):
         answer["impact"] = shorten(client, answer["impact"], usage)
     return dict(answer, usage=usage), None
 
@@ -328,10 +332,10 @@ def main():
 
     package = jf.Package(tomllib.loads((jf.HERE / "torvenyek.toml").read_text()))
     out = args.data / "elemzesek.jsonl"
-    # The latest answer per find counts; one over the length limit is asked again.
+    # The latest answer per find counts. Its length was checked when it was
+    # written (ask), so an abbreviation the count trips on is not asked daily.
     latest = {(a["source"], a["id"]): a for a in jf.read_jsonl(out)}
-    done = {k for k, a in latest.items()
-            if a.get("refused") or (a.get("v") == VERSION and sentences(a.get("impact", "")) <= MAX_SENTENCES)}
+    done = {k for k, a in latest.items() if a.get("refused") or a.get("v") == VERSION}
     todo = [h for h in latest_finds(args.data) if (h["source"], h["id"]) not in done][:args.limit]
     errors = []
 
