@@ -984,7 +984,7 @@ def read_jsonl(path):
 DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "score", "strong",
                     "issue", "page", "kind", "section", "case", "found", "outcome", "form", "decided",
                     "technical", "excerpt", "marks", "effective", "changes", "level", "topic")
-AI_FIELDS = ("impact", "importance", "importance_reason", "changes", "technical", "technical_reason")
+AI_FIELDS = ("impact", "technical")
 
 
 def hidden(row):
@@ -1104,16 +1104,7 @@ def feed_entry(h):
         para(h.get("title"))
         decision()
     if h.get("ai"):
-        a = h["ai"]
-        body.append(f'<p><b>Összefoglaló (fontosság: {e(a["importance"])}):</b> {e(a["importance_reason"])}</p>')
-        para(a["impact"])
-        if a.get("changes"):
-            body.append("<ul>" + "".join(f'<li><b>{e(c["where"])}:</b> ' + (f'eddig: {e(c["before"])} ' if c["before"] else "")
-                                         + f'mostantól: {e(c["after"])}</li>' for c in a["changes"]) + "</ul>")
-        if a["technical"] and not h.get("technical"):
-            para(a["technical_reason"], "Az összefoglaló szerint technikai")
-        elif not a["technical"] and h.get("technical") and h["k"] == "kozlony":
-            para(a["technical_reason"], "Az összefoglaló szerint érdemi")
+        para(h["ai"]["impact"], "Összefoglaló")
     return title, link or SITE, tags, "".join(body)
 
 

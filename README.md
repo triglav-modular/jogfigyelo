@@ -40,10 +40,12 @@ git -C data add -A && git -C data commit -m Futás && git -C data push
 
 `elemzes.py` sends each new find to Claude Haiku (`claude-haiku-5-5`) with its
 full text: the decision's PDF, the Kúria's page, or the gazette act re-read
-from its issue. The answer is what it means for workers, an importance rating
-with a reason, for a gazette act each amended section before and after, and a
-second opinion on whether it is only technical. An entry the rules mark
-technical stays visible when the summary reads it as substantive.
+from its issue. The answer is a summary of at most three sentences (what it
+means for workers; for a gazette act, what the rule said and says now) and a
+second opinion on whether it is only technical. A gazette act the rules mark
+technical stays visible when the summary reads it as substantive. Changing
+what is asked means bumping `VERSION` in `elemzes.py`: the next run then
+summarises every find again.
 
 The old wording of an amended section comes from `data/njt/`, a copy of each
 statute in `torvenyek.toml` from njt.hu (which shows only the text in force

@@ -139,16 +139,9 @@
 .jf .jf-summary.jf-excerpt, .jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
 .jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
 .jf-item.is-tech { opacity: 0.75; }
-.jf-pill.imp-magas { background: var(--m_yellow); color: var(--m_black); }
-.jf-pill.imp-közepes { box-shadow: inset 0 0 0 2px var(--m_black); color: var(--m_black); }
-.jf-pill.imp-alacsony { box-shadow: inset 0 0 0 2px #cfc8c1; color: #6e6660; }
 .jf-ai { display: grid; gap: 4px; font-family: "Rubik", sans-serif; font-size: 14px; line-height: 1.55; color: var(--m_black_text); border-left: 3px solid var(--m_yellow); padding-left: 10px; margin-top: 2px; overflow-wrap: anywhere; }
 .jf-ai > b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #6e6660; }
 .jf .jf-ai p { margin: 0; text-align: left; hyphens: manual; }
-.jf-ai ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
-.jf-ai li::before { content: none; }
-.jf-ai li b { font-family: "Space Mono", monospace; font-size: 12px; margin-right: 6px; }
-.jf-ai .why { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; }
 .jf-loadmore { justify-self: start; }
 .jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
 </style>
@@ -473,27 +466,11 @@
     return out;
   }
 
-  const IMPORTANCE = { magas: "fontos", "közepes": "közepesen fontos", alacsony: "kevésbé fontos" };
-  function importancePill(h) {
-    const a = h.ai;
-    if (!a || !IMPORTANCE[a.importance]) return null;
-    return el("span", { class: "jf-pill imp-" + a.importance, title: a.importance_reason || "", text: IMPORTANCE[a.importance] });
-  }
-
   function aiBlock(h) {
     // Machine-written: set apart, and the footer says so.
     const a = h.ai;
-    if (!a) return null;
-    const kids = [el("b", { text: "Összefoglaló" })];
-    if (a.impact) kids.push(el("p", { text: a.impact }));
-    const changes = Array.isArray(a.changes) ? a.changes.filter(c => c && c.where) : [];
-    if (changes.length) kids.push(el("ul", {}, changes.map(c => el("li", {}, el("b", { text: c.where }),
-      c.before ? `Eddig: ${c.before} ` : "", `Mostantól: ${c.after || ""}`))));
-    const why = [a.importance_reason];
-    if (a.technical && !h.technical) why.push(`Technikai: ${a.technical_reason || ""}`);
-    if (!a.technical && h.technical && h.k === "kozlony") why.push(`A szabály technikainak jelölte, de érdemi: ${a.technical_reason || ""}`);
-    kids.push(el("p", { class: "why", text: why.filter(Boolean).join(" ") }));
-    return el("div", { class: "jf-ai" }, kids);
+    if (!a || !a.impact) return null;
+    return el("div", { class: "jf-ai" }, el("b", { text: "Összefoglaló" }), el("p", { text: a.impact }));
   }
 
   function itemNode(group) {
@@ -501,7 +478,6 @@
     const src = el("div", { class: "jf-src" }, el("span", { class: "jf-label", text: sourceTag(h) }),
       fresh ? el("span", { class: "jf-pill new", title: "Új az előző látogatásod óta", text: "új" }) : null,
       h.k === "kozlony" && h.strong ? el("span", { class: "jf-pill alert", text: "erős jelzés" }) : null,
-      importancePill(h),
       techPill(h),
       h.k === "kozlony" && h.page ? el("span", { class: "jf-page", text: `${h.page}. oldal` }) : null);
     const kids = [src];

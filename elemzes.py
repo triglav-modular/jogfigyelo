@@ -6,10 +6,9 @@ DATA/elemzesek.jsonl, the source is read in full (the decision's PDF, the
 Kúria's page, the gazette act re-read from its issue) and sent to Claude
 Haiku in one request, which answers with:
 
-  impact      what it means for workers, in two or three plain sentences
-  importance  magas / közepes / alacsony, and a sentence on why
-  changes     for a gazette act: each amended section, before and after
-  technical   whether it is only technical, and why
+  impact      the summary, at most three sentences: what it means for
+              workers; for a gazette act, what the rule said and says now
+  technical   whether it is only technical
 
 The answer is appended to DATA/elemzesek.jsonl, and jogfigyelo.py --export
 puts it beside the find on the dashboard and in the feed. A find whose source
@@ -49,71 +48,43 @@ NJT_BLOCKS = "https://njt.jog.gov.hu/ajax/njtGetBlock.json"
 NJT_DAYS = 7
 WORKERS = 4
 
+# Bumped when what is asked changes; finds summarised under an older version
+# are summarised again on the next run.
+VERSION = 2
+
 SYSTEM = """\
-You analyse new Hungarian labour-law material for a Munka (amunka.hu), a \
+You summarise new Hungarian labour-law material for a Munka (amunka.hu), a \
 workers' organisation. Its watch page lists new gazette acts and court \
-decisions for workers, shop stewards and labour lawyers, and your analysis \
-appears under each entry, marked as machine-written.
+decisions for workers, shop stewards and labour lawyers, and your summary \
+appears under each entry.
 
-Write every field in Hungarian, in plain language a worker understands; keep \
-a legal term only where there is no plain word for it. Work only from the \
-text you are given. Do not add facts, section contents or case law from \
-memory. Where the text does not say something, say so rather than guess.
+Write in Hungarian, in plain language a worker understands; keep a legal term \
+only where there is no plain word for it. Work only from the text you are \
+given. Do not add facts, section contents or case law from memory. Where the \
+text does not say something, leave it out rather than guess.
 
-impact: two or three sentences on who is affected (which workers, employers \
-or sector) and what changes for them in practice. For a court decision, the \
-general point a worker in a similar situation can rely on, not the story of \
-the parties.
-
-importance: how much this matters to workers.
-- magas: it changes or settles a core worker protection: notice period, \
-dismissal and its protections, severance, wages and the minimum wage, working \
-time, rest and overtime, public holidays and which days are worked, leave, \
-health and safety duties, strike, union and works council rights, collective \
-agreements; or a Kúria or court of appeal decision on such a question.
-- közepes: it matters to one group (public servants, teachers, health \
-workers, the armed services) or concerns a narrower right; or a procedural \
-decision that changes how workers can enforce a claim.
-- alacsony: renaming institutions, reorganising authorities, updating cross \
-references, a purely procedural order, or a case decided on its own facts \
-with no lesson for others.
-importance_reason: one sentence.
-
-changes: only for a gazette act, one entry per amended section of the \
-followed statutes listed in the request, in the order given. "where" is the \
-location as given ("Mt. 69. § (1)"). "before" is what the rule said, in one \
-sentence, taken from the current text supplied with it; leave it empty when \
-no current text is supplied or when the supplied text already reads like the \
-new wording (the amendment is then already in force there). "after" is what \
-the rule says under the amendment, in one sentence. For a court decision, an \
-empty list.
+impact: the summary, at most three sentences. Say who is affected (which \
+workers, employers or sector) and what changes for them in practice. For a \
+gazette act that amends the followed statutes listed in the request, say what \
+the rule said before and what it says now, taking the earlier rule from the \
+current text supplied with it; if no current text is supplied, or it already \
+reads like the new wording, say only what the rule says now. For a court \
+decision, give the general point a worker in a similar situation can rely on, \
+not the story of the parties. Do not rate how important it is.
 
 technical: true when it changes nothing of substance in workers' rights and \
 duties: only swapping wording, renaming bodies, moving competences between \
 authorities, or a court order that settles procedure (rejecting an appeal as \
 inadmissible, correcting a clerical error, suspending, fixing costs) without \
-deciding the claim. Otherwise false.
-technical_reason: one sentence."""
+deciding the claim. Otherwise false."""
 
 SCHEMA = {
     "type": "object",
     "properties": {
         "impact": {"type": "string"},
-        "importance": {"type": "string", "enum": ["magas", "közepes", "alacsony"]},
-        "importance_reason": {"type": "string"},
-        "changes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"where": {"type": "string"}, "before": {"type": "string"}, "after": {"type": "string"}},
-                "required": ["where", "before", "after"],
-                "additionalProperties": False,
-            },
-        },
         "technical": {"type": "boolean"},
-        "technical_reason": {"type": "string"},
     },
-    "required": ["impact", "importance", "importance_reason", "changes", "technical", "technical_reason"],
+    "required": ["impact", "technical"],
     "additionalProperties": False,
 }
 
@@ -326,7 +297,7 @@ def main():
 
     package = jf.Package(tomllib.loads((jf.HERE / "torvenyek.toml").read_text()))
     out = args.data / "elemzesek.jsonl"
-    done = {(a["source"], a["id"]) for a in jf.read_jsonl(out)}
+    done = {(a["source"], a["id"]) for a in jf.read_jsonl(out) if a.get("v") == VERSION}
     todo = [h for h in latest_finds(args.data) if (h["source"], h["id"]) not in done][:args.limit]
     errors = []
 
@@ -365,7 +336,7 @@ def main():
             if failure:
                 errors.append(f"elemzés, {h['source']} {h.get('ref', '')}: {failure}")
                 continue
-            log.write(json.dumps(dict(answer, source=h["source"], id=h["id"], model=MODEL,
+            log.write(json.dumps(dict(answer, source=h["source"], id=h["id"], model=MODEL, v=VERSION,
                                       at=dt.datetime.now().astimezone().isoformat(timespec="seconds")), ensure_ascii=False) + "\n")
             log.flush()
             analysed += 1
