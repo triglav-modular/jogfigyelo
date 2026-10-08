@@ -984,6 +984,12 @@ def read_jsonl(path):
 DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "score", "strong",
                     "issue", "page", "kind", "section", "case", "found", "outcome", "form", "decided",
                     "technical", "excerpt", "marks", "effective", "changes", "level", "topic")
+AI_FIELDS = ("impact", "importance", "importance_reason", "changes", "technical", "technical_reason")
+
+
+def hidden(row):
+    """Hidden by default: technical by the rules, unless the summary reads it as substantive."""
+    return bool(row.get("technical")) and not (row.get("ai") and row["ai"]["technical"] is False)
 
 
 def export(data, out):
@@ -999,6 +1005,9 @@ def export(data, out):
         # newer fields and the time it was first found.
         first = latest[key]["found"] if key in latest else h["found"]
         latest[key] = dict(h, found=min(first, h["found"]))
+    # elemzes.py's answers; a refused request leaves the find without one.
+    ai = {(a["source"], a["id"]): {f: a[f] for f in AI_FIELDS if f in a}
+          for a in read_jsonl(data / "elemzesek.jsonl") if not a.get("refused")}
     rows = []
     for h in latest.values():
         row = {"k": h["source"], "id": h["id"],
@@ -1006,6 +1015,8 @@ def export(data, out):
         row.update({f: h[f] for f in DASHBOARD_FIELDS if h.get(f) not in (None, "", [])})
         if h.get("terms"):
             row["terms"] = h["terms"][:5]
+        if (h["source"], h["id"]) in ai:
+            row["ai"] = ai[(h["source"], h["id"])]
         rows.append(row)
     runs = read_jsonl(data / "runs.jsonl")
     now = dt.datetime.now(dt.timezone.utc).astimezone()
@@ -1086,17 +1097,26 @@ def feed_entry(h):
         para(h.get("kind"))
         para(h.get("title"))
         decision()
+    if h.get("ai"):
+        a = h["ai"]
+        body.append(f'<p><b>Összefoglaló (fontosság: {e(a["importance"])}):</b> {e(a["importance_reason"])}</p>')
+        para(a["impact"])
+        if a.get("changes"):
+            body.append("<ul>" + "".join(f'<li><b>{e(c["where"])}:</b> ' + (f'eddig: {e(c["before"])} ' if c["before"] else "")
+                                         + f'mostantól: {e(c["after"])}</li>' for c in a["changes"]) + "</ul>")
+        if a["technical"] != bool(h.get("technical")):
+            para(a["technical_reason"], "Az összefoglaló szerint " + ("technikai" if a["technical"] else "érdemi"))
     return title, link or SITE, tags, "".join(body)
 
 
 def write_feed(rows, now, path):
     """Write the latest finds as an RSS 2.0 feed beside the dashboard.
 
-    Technical entries are left out, as the dashboard hides them by default.
+    What the dashboard hides by default is left out (hidden()).
     An item is dated by its own day, the one the dashboard files it under.
     """
     x = xml.sax.saxutils.escape
-    rows = sorted((r for r in rows if not r.get("technical")),
+    rows = sorted((r for r in rows if not hidden(r)),
                   key=lambda r: (r["day"], r.get("found", "")), reverse=True)[:FEED_ITEMS]
     items = []
     for r in rows:

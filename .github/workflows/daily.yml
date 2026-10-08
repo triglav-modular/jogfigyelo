@@ -1,0 +1,83 @@
+# Every morning: check the sources, summarise what is new, keep the state on
+# the data branch, and publish the page, data.json and feed.xml to
+# https://amunka.hu/jogfigyelo/.
+#
+# Repository secrets (Settings > Secrets and variables > Actions):
+#   FTP_HOST, FTP_USER, FTP_PASS   the amunka.hu FTP account (the .env keys)
+#   ANTHROPIC_API_KEY              for the summaries (elemzes.py)
+# Without the FTP secrets nothing is published; without the API key the
+# finds go out without a summary and get one on the first run that has it.
+name: Napi futás
+
+on:
+  schedule:
+    - cron: "15 4 * * *"  # 06:15 in Budapest in summer, 05:15 in winter
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TZ: Europe/Budapest
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_FTP: ${{ secrets.FTP_PASS != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: data
+          path: data
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poppler, rclone and the Anthropic SDK
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q poppler-utils rclone
+          pip install -q anthropic
+
+      # A source that fails is retried on the next run; the job fails at the
+      # end so the failure is seen, after what did work is kept and published.
+      - name: Check the sources
+        id: watch
+        run: python3 jogfigyelo.py || echo "failed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise new finds
+        id: summarise
+        if: env.HAS_KEY == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 elemzes.py || echo "failed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the state
+        working-directory: data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -q -m "Futás, $(date '+%Y-%m-%d %H:%M')"
+          git push -q
+
+      - name: Publish
+        if: env.HAS_FTP == 'true'
+        env:
+          FTPhost: ${{ secrets.FTP_HOST }}
+          FTPuser: ${{ secrets.FTP_USER }}
+          FTPpass: ${{ secrets.FTP_PASS }}
+        run: ./deploy.sh
+
+      - name: Fail if a source or the summaries failed
+        if: steps.watch.outputs.failed == '1' || steps.summarise.outputs.failed == '1'
+        run: |
+          echo "::error::A source or the summaries failed: see the step logs above and data/runs.jsonl."
+          exit 1

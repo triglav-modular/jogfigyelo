@@ -9,14 +9,20 @@
 # (build_page.py), so a change to the site's menu or theme reaches it then.
 #
 # Uploads only add or replace files in /jogfigyelo; nothing on the server is
-# deleted. Credentials come from .env (FTPhost, FTPuser, FTPpass: the same
-# keys as the aMunka repo's).
+# deleted, and they go over TLS. Credentials come from the environment
+# (FTPhost, FTPuser, FTPpass: how the daily GitHub workflow passes them) or
+# else from .env, under the same keys as the aMunka repo's.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 REMOTE="amunka:/web/amunka.hu/jogfigyelo"
 
 env_get() {
+	if [ -n "${!1:-}" ]; then
+		printf '%s\n' "${!1}"
+		return
+	fi
+	[ -f "$ROOT/.env" ] || return 0
 	sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$ROOT/.env" | head -1 |
 		sed -E "s/[[:space:]]+\$//; s/^[\"']//; s/[\"']\$//"
 }
@@ -26,6 +32,7 @@ host="${host#*://}"
 host="${host%%/*}"
 
 export RCLONE_CONFIG_AMUNKA_TYPE=ftp
+export RCLONE_CONFIG_AMUNKA_EXPLICIT_TLS=true
 export RCLONE_CONFIG_AMUNKA_HOST="$host"
 export RCLONE_CONFIG_AMUNKA_USER="$(env_get FTPuser)"
 export RCLONE_CONFIG_AMUNKA_PASS="$(env_get FTPpass | rclone obscure -)"

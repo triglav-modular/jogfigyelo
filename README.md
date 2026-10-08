@@ -13,19 +13,49 @@ feed of the latest 100 finds at https://amunka.hu/jogfigyelo/feed.xml.
 
 ## Running it
 
-```
-python3 jogfigyelo.py              # check every source, report what is new
-./deploy.sh --data                 # publish the updated data.json and feed.xml
-```
+Every morning a GitHub workflow (`.github/workflows/daily.yml`) checks the
+sources, summarises what is new, commits the state to the `data` branch and
+publishes the page, `data.json` and `feed.xml`. It needs four repository
+secrets: `FTP_HOST`, `FTP_USER`, `FTP_PASS` (the amunka.hu FTP account) and
+`ANTHROPIC_API_KEY` (the summaries). It can also be started by hand from the
+Actions tab.
 
 A run writes a Markdown report to `data/jelentesek/`, appends its finds to
 `data/talalatok.jsonl` and itself to `data/runs.jsonl`, and remembers what it
-has seen in `data/state.json`. `data/` is local and not in git. A source that
-fails is left unmarked, retried on the next run, and the run exits 1.
+has seen in `data/state.json`. A source that fails is left unmarked, retried
+on the next run, and the run fails so it is noticed.
 
-`./deploy.sh` with no argument also rebuilds and uploads the page; `--dry-run`
-lists what it would upload. It needs `rclone`, and a `.env` with `FTPhost`,
-`FTPuser` and `FTPpass`.
+`data/` is the `data` branch checked out as a worktree. To run by hand:
+
+```
+git worktree add data data         # once
+git -C data pull
+python3 jogfigyelo.py              # check every source
+python3 elemzes.py                 # summarise the new finds
+./deploy.sh                        # publish (credentials from .env)
+git -C data add -A && git -C data commit -m Futás && git -C data push
+```
+
+### Summaries
+
+`elemzes.py` sends each new find to Claude Haiku (`claude-haiku-5-5`) with its
+full text: the decision's PDF, the Kúria's page, or the gazette act re-read
+from its issue. The answer is what it means for workers, an importance rating
+with a reason, for a gazette act each amended section before and after, and a
+second opinion on whether it is only technical. An entry the rules mark
+technical stays visible when the summary reads it as substantive.
+
+The old wording of an amended section comes from `data/njt/`, a copy of each
+statute in `torvenyek.toml` from njt.hu (which shows only the text in force
+today), refreshed weekly after the summaries. `python3 elemzes.py --dry-run`
+prints what would be sent.
+
+### Publishing
+
+`./deploy.sh` rebuilds and uploads the page; `--data` uploads only the data
+and the feed; `--dry-run` lists what it would upload. It needs `rclone`, and
+the FTP credentials in the environment (the workflow) or in a `.env` with
+`FTPhost`, `FTPuser` and `FTPpass`. Uploads go over TLS.
 
 The page is `web/dashboard.html`, the dashboard alone. `build_page.py` puts it
 inside the chrome of a live amunka.hu page (head, header and menu, footer,
@@ -34,7 +64,8 @@ it here, and writes `web/index.html`. The folder sits outside Grav: the
 site's rewrite rules serve real folders directly, and the aMunka repo's
 `sync-from-server.sh` excludes it.
 
-Requires Python 3.11+ and poppler (`pdftotext`, `pdfinfo`).
+Requires Python 3.11+, poppler (`pdftotext`, `pdfinfo`) and, for the
+summaries, the `anthropic` package.
 
 ## Tuning
 
