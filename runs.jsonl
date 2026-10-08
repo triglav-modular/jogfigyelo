@@ -1,0 +1,6 @@
+{"at": "2026-09-28T11:22:11+02:00", "found": {"kozlony": 8, "bhgy": 67, "kuria_bh": 2, "ab": 1}, "errors": []}
+{"at": "2026-09-28T11:37:52+02:00", "found": {"kozlony": 21, "bhgy": 303, "kuria": 2, "kuria_bh": 3, "ab": 1}, "errors": [], "coverage": {"kozlony": "2026-07-06", "bhgy": "2026-07-06", "kuria": "2026-07-06", "ab": "2026-09-17"}}
+{"at": "2026-09-28T12:46:10+02:00", "found": {"kozlony": 7, "bhgy": 303, "kuria": 2, "kuria_bh": 3, "ab": 1}, "errors": [], "coverage": {"kozlony": "2026-07-07", "bhgy": "2026-07-06", "kuria": "2026-07-06", "ab": "2026-09-17"}}
+{"at": "2026-09-28T12:59:11+02:00", "found": {"kozlony": 7, "bhgy": 303, "kuria": 2, "kuria_bh": 3, "ab": 1}, "errors": [], "coverage": {"kozlony": "2026-07-07", "bhgy": "2026-07-06", "kuria": "2026-07-06", "ab": "2026-09-17"}}
+{"at": "2026-10-08T08:50:53+02:00", "found": {"kozlony": 3, "bhgy": 22}, "errors": ["ab: invalid literal for int() with base 10: '2026. szep'"]}
+{"at": "2026-10-08T08:53:18+02:00", "found": {}, "errors": []}
