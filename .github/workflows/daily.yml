@@ -59,15 +59,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python3 elemzes.py || echo "failed=1" >> "$GITHUB_OUTPUT"
 
-      - name: Keep the state
-        working-directory: data
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet || git commit -q -m "Futás, $(date '+%Y-%m-%d %H:%M')"
-          git push -q
-
       - name: Publish
         if: env.HAS_FTP == 'true'
         env:
@@ -76,8 +67,20 @@ jobs:
           FTPpass: ${{ secrets.FTP_PASS }}
         run: ./deploy.sh
 
+      # Last, and whatever failed before it: the state, the summaries and the
+      # page copy build_page.py keeps all go to the data branch.
+      - name: Keep the state
+        if: always()
+        working-directory: data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -q -m "Futás, $(date '+%Y-%m-%d %H:%M')"
+          git push -q
+
       - name: Fail if a source or the summaries failed
-        if: steps.watch.outputs.failed == '1' || steps.summarise.outputs.failed == '1'
+        if: always() && (steps.watch.outputs.failed == '1' || steps.summarise.outputs.failed == '1')
         run: |
           echo "::error::A source or the summaries failed: see the step logs above and data/runs.jsonl."
           exit 1

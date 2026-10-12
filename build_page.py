@@ -8,14 +8,20 @@ body of web/dashboard.html, and that file's head and script parts are added.
 The dashboard so wears the site's current design and menu without a copy of
 either in this repository. deploy.sh runs this before a full upload.
 
+Each successful build keeps the page it borrowed from as data/chrome.html (the
+data branch). When amunka.hu refuses the request, as its proxy does for some
+GitHub runner addresses, that copy is used instead and a warning is printed.
 Fails, and writes nothing, if the page no longer has the markers it cuts at.
 """
+import os
 import re
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+CACHE = HERE / "data" / "chrome.html"
 CHROME = "https://amunka.hu/rolunk"
 URL = "https://amunka.hu/jogfigyelo/"
 UA = "amunka.hu jogfigyelo/1.0 (+https://amunka.hu)"
@@ -35,9 +41,22 @@ def replace_once(page, pattern, new, what):
     return page
 
 
-def main():
+def chrome():
+    """The live page, or the copy kept from the last build if it is refused."""
     req = urllib.request.Request(CHROME, headers={"User-Agent": UA})
-    page = urllib.request.urlopen(req, timeout=60).read().decode("utf-8")
+    try:
+        return urllib.request.urlopen(req, timeout=60).read().decode("utf-8"), True
+    except (urllib.error.URLError, TimeoutError) as e:
+        if not CACHE.exists():
+            sys.exit(f"{CHROME}: {e}, and there is no {CACHE} to build from")
+        # A GitHub annotation in the workflow; an ordinary line elsewhere.
+        print(f"::warning::{CHROME}: {e}; built from the copy in {CACHE.relative_to(HERE)}")
+        return CACHE.read_text(), False
+
+
+def main():
+    page, live = chrome()
+    source = page
     fragment = (HERE / "web" / "dashboard.html").read_text()
 
     page = replace_once(page, r"<title>.*?</title>", "<title>Jogfigyelő | a Munka</title>", "<title>")
@@ -52,7 +71,11 @@ def main():
 
     out = HERE / "web" / "index.html"
     out.write_text(page)
-    print(f"{out} ({len(page.encode()) // 1024} KB, chrome from {CHROME})")
+    if live and CACHE.parent.is_dir():
+        tmp = CACHE.with_suffix(".tmp")
+        tmp.write_text(source)
+        os.replace(tmp, CACHE)
+    print(f"{out} ({len(page.encode()) // 1024} KB, chrome from {CHROME if live else CACHE})")
 
 
 if __name__ == "__main__":

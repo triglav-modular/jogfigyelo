@@ -31,7 +31,7 @@ on the next run, and the run fails so it is noticed.
 git worktree add data data         # once
 git -C data pull
 python3 jogfigyelo.py              # check every source
-python3 elemzes.py                 # summarise the new finds
+python3 elemzes.py                 # summarise finds that have no summary
 ./deploy.sh                        # publish (credentials from .env)
 git -C data add -A && git -C data commit -m Futás && git -C data push
 ```
@@ -41,7 +41,7 @@ git -C data add -A && git -C data commit -m Futás && git -C data push
 `elemzes.py` sends each new find to Claude Haiku (`claude-haiku-5-5`) with its
 full text: the decision's PDF, the Kúria's page, or the gazette act re-read
 from its issue. The answer is a one-sentence summary of at most about 30 words
-(what changes for workers; for a gazette act, what the rule now says) and a
+(what changes for workers; for a gazette act, what the amended rule says) and a
 second opinion on whether it is only technical. A gazette act the rules mark
 technical stays visible when the summary reads it as substantive. Changing
 what is asked means bumping `VERSION` in `elemzes.py`: the next run then
@@ -62,7 +62,10 @@ the FTP credentials in the environment (the workflow) or in a `.env` with
 The page is `web/dashboard.html`, the dashboard alone. `build_page.py` puts it
 inside the chrome of a live amunka.hu page (head, header and menu, footer,
 cookie consent), so it carries the site's current design without a copy of
-it here, and writes `web/index.html`. The folder sits outside Grav: the
+it here, and writes `web/index.html`. Each build keeps the borrowed page as
+`data/chrome.html`; when amunka.hu refuses the request (its proxy turns away
+some GitHub runner addresses), the page is built from that copy and the run
+shows a warning. The folder sits outside Grav: the
 site's rewrite rules serve real folders directly, and the aMunka repo's
 `sync-from-server.sh` excludes it.
 
@@ -87,5 +90,5 @@ acts that only swap or strike out wording, and court orders that settle
 procedure rather than the claim (`technical_case_types`, `technical_orders`
 in `config.toml`).
 
-The older keyword weighting (`keyword_scoring` in `config.toml`) is switched
-off; court decisions and Kúria press releases are still matched on keywords.
+Keyword scoring (`keyword_scoring` in `config.toml`) is off for gazette acts;
+court decisions and Kúria press releases are matched on keywords.
