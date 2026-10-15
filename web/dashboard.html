@@ -56,35 +56,6 @@
   border: 2px solid var(--m_black); border-radius: 0; padding: 5px 10px; flex: 1 1 100%; width: 100%; min-width: 0; box-sizing: border-box;
 }
 
-/* Tiles: the site's thick black rule over each block */
-.jf-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
-@media (max-width: 560px) { .jf-tiles { grid-template-columns: 1fr; } }
-.jf-tile { border-top: 6px solid var(--m_black); padding-top: 10px; display: grid; gap: 2px; min-width: 0; }
-.jf-tile-value { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.jf-tile-value b { font-family: "Euclid Square", "Rubik", sans-serif; font-weight: 700; font-size: 56px; line-height: 1; color: var(--m_black); letter-spacing: -0.01em; }
-.jf-tile-value span { font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black_text); }
-.jf-spark { position: relative; margin-top: 6px; padding-top: 16px; }
-.jf-spark-cols { display: flex; align-items: flex-end; gap: 3px; height: 48px; border-bottom: 2px solid var(--m_black); }
-.jf-spark-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.jf-spark-col i { display: block; width: 100%; max-width: 18px; background: var(--m_black); }
-.jf-spark-col.cur i { background: var(--m_red); }
-.jf-spark-col.nodata { background: repeating-linear-gradient(135deg, transparent 0 4px, #d9d3cd 4px 5px); }
-.jf-spark-col:hover i, .jf-spark-col:focus-visible i { opacity: 0.7; }
-.jf-spark-axis { display: flex; justify-content: space-between; font-family: "Space Mono", monospace; font-size: 11px; color: #6e6660; margin-top: 4px; }
-.jf-spark-max { position: absolute; top: 0; right: 0; font-family: "Space Mono", monospace; font-size: 11px; color: #6e6660; }
-.jf-tip {
-  position: fixed; z-index: 100; pointer-events: none; background: var(--m_black); color: #fff;
-  font-family: "Space Mono", monospace; font-size: 12px; padding: 5px 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px));
-}
-.jf-tip b { margin-right: 6px; }
-.jf-charts { display: grid; gap: 18px; }
-.jf-charts[open] > summary { margin-bottom: 6px; }
-.jf-charts > summary, .jf-table summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
-.jf-table-scroll { overflow-x: auto; margin-top: 10px; }
-.jf-table table { border-collapse: collapse; font-family: "Space Mono", monospace; font-size: 12px; }
-.jf-table th, .jf-table td { padding: 4px 10px; border-bottom: 1px solid #e3ddd7; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.jf-table th:first-child, .jf-table td:first-child { text-align: left; }
-
 /* Feed: stacked dates down the left, as on the site's listing */
 .jf-feed-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 6px solid var(--m_black); padding-bottom: 6px; }
 .jf-feed-side { display: flex; align-items: center; gap: 14px; }
@@ -174,15 +145,6 @@
               <button type="button" class="jf-btn" id="showTech" aria-pressed="false" title="Csak szövegcserés jogszabály-módosítások és eljárási végzések">Technikai tételek is <span class="n" id="techCount">0</span></button>
             </div>
 
-            <details class="jf-charts">
-              <summary>Grafikonok</summary>
-              <section class="jf-tiles" id="tiles" aria-label="Összesítés forrásonként"></section>
-              <details class="jf-table">
-                <summary>Heti számok táblázatban</summary>
-                <div class="jf-table-scroll" id="weekTable"></div>
-              </details>
-            </details>
-
             <section aria-labelledby="feedTitle">
               <div class="jf-feed-head">
                 <h2 id="feedTitle">Találatok</h2>
@@ -202,7 +164,6 @@
     <div id="sidebar" class="block pure-u-1-3 toc-sidebar-wrap"></div>
   </div>
 </section>
-<div class="jf-tip" id="tip" hidden></div>
 <!-- /body -->
 
 <!-- script -->
@@ -211,10 +172,10 @@
   "use strict";
 
   const GROUPS = [
-    { key: "kozlony", name: "Magyar Közlöny", unit: "jogszabály", sources: ["kozlony"] },
-    { key: "bhgy", name: "Bírósági határozatok", unit: "határozat", sources: ["bhgy"] },
-    { key: "kuria", name: "Kúria", unit: "döntés", sources: ["kuria", "kuria_bh"] },
-    { key: "ab", name: "Alkotmánybíróság", unit: "döntés", sources: ["ab"] },
+    { key: "kozlony", name: "Magyar Közlöny", sources: ["kozlony"] },
+    { key: "bhgy", name: "Bírósági határozatok", sources: ["bhgy"] },
+    { key: "kuria", name: "Kúria", sources: ["kuria", "kuria_bh"] },
+    { key: "ab", name: "Alkotmánybíróság", sources: ["ab"] },
   ];
   const GROUP_OF = {};
   GROUPS.forEach(g => g.sources.forEach(s => { GROUP_OF[s] = g.key; }));
@@ -239,7 +200,7 @@
     if (Array.isArray(saved) && saved.length) ui.groups = new Set(saved.filter(k => GROUPS.some(g => g.key === k)));
   } catch (e) { /* keep defaults */ }
 
-  let hits = [], runs = [], coverage = {}, loaded = false;
+  let hits = [], runs = [], loaded = false;
 
   const $ = id => document.getElementById(id);
   function el(tag, props, ...kids) {
@@ -258,13 +219,6 @@
   function link(text, url, cls) { const href = safeUrl(url); return href ? el("a", { href, target: "_blank", rel: "noopener", class: cls, text }) : null; }
   function parseDay(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ""); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
   const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
-  function monday(d) { const x = startOfDay(d); return addDays(x, -((x.getDay() + 6) % 7)); }
-  function isoWeek(d) {
-    const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
-    return Math.ceil(((x - new Date(Date.UTC(x.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7);
-  }
   const two = n => String(n).padStart(2, "0");
   const short = d => `${MON3[d.getMonth()]} ${d.getDate()}.`;
   function stamp(iso) {
@@ -290,19 +244,10 @@
     });
     hits = Array.from(byKey.values()).sort((a, b) => b._d - a._d || String(b.found || "").localeCompare(String(a.found || "")));
     runs = allRuns.sort((a, b) => String(b.at).localeCompare(String(a.at)));
-    coverage = {};
-    runs.forEach(r => {
-      if (!r.coverage) return;
-      for (const [src, day] of Object.entries(r.coverage)) {
-        const g = GROUP_OF[src], d = parseDay(day);
-        if (g && d && (!coverage[g] || d < coverage[g])) coverage[g] = d;
-      }
-    });
     loaded = true;
     render();
   }
 
-  const inRange = (h, from, to) => h._d >= from && h._d < to;
   // Technical by the rules is hidden. The summary can overrule that for a gazette
   // act (an annulled phrase can change a right); a court order's flag stands.
   const hiddenTech = h => !!h.technical && !(h.k === "kozlony" && h.ai && h.ai.technical === false);
@@ -340,66 +285,6 @@
     $("techCount").textContent = String(hits.filter(hiddenTech).length);
     $("showTech").setAttribute("aria-pressed", String(ui.showTech));
   }
-
-  function renderTiles() {
-    const box = $("tiles"); box.replaceChildren();
-    if (!loaded) {
-      GROUPS.forEach(g => box.append(el("article", { class: "jf-tile" }, el("div", { class: "jf-label", text: g.name }),
-        el("div", { class: "jf-tile-value" }, el("b", { text: "–" })))));
-      return;
-    }
-    const weeks = [], thisMon = monday(new Date());
-    for (let i = 11; i >= 0; i--) weeks.push(addDays(thisMon, -7 * i));
-    const table = [];
-    GROUPS.forEach(g => {
-      const mine = hits.filter(h => h._g === g.key && visible(h));
-      const value = mine.length;
-      const cov = coverage[g.key];
-      const counts = weeks.map(w => {
-        const end = addDays(w, 7);
-        return { w, n: !cov || end > cov ? mine.filter(h => inRange(h, w, end)).length : null };
-      });
-      const max = Math.max(1, ...counts.map(c => c.n || 0));
-      table.push(counts);
-      const cols = counts.map((c, i) => {
-        const label = `${isoWeek(c.w)}. hét (${short(c.w)}–${short(addDays(c.w, 6))})`;
-        const tipText = c.n == null ? "nincs adat: a figyelő eddig nem lát vissza" : `${c.n} ${g.unit}`;
-        const col = el("div", {
-          class: "jf-spark-col" + (i === counts.length - 1 ? " cur" : "") + (c.n == null ? " nodata" : ""),
-          tabindex: "0", role: "img", "aria-label": `${g.name}, ${label}: ${tipText}`,
-        }, el("i", { style: c.n == null ? null : `height:${c.n ? Math.max(6, (100 * c.n) / max) : 0}%` }));
-        const show = () => showTip(col, tipText, label);
-        col.addEventListener("pointermove", show);
-        col.addEventListener("focus", show);
-        col.addEventListener("pointerleave", hideTip);
-        col.addEventListener("blur", hideTip);
-        return col;
-      });
-      box.append(el("article", { class: "jf-tile" },
-        el("div", { class: "jf-label", text: g.name }),
-        el("div", { class: "jf-tile-value" }, el("b", { text: String(value) }), el("span", { text: `${g.unit} · összesen` })),
-        el("div", { class: "jf-spark" },
-          el("span", { class: "jf-spark-max", text: `max. ${max}/hét` }),
-          el("div", { class: "jf-spark-cols" }, cols),
-          el("div", { class: "jf-spark-axis" }, el("span", { text: short(weeks[0]) }), el("span", { text: "e hét" })))));
-    });
-    $("weekTable").replaceChildren(el("table", {},
-      el("thead", {}, el("tr", {}, el("th", { text: "Hét" }), GROUPS.map(g => el("th", { text: g.name })))),
-      el("tbody", {}, weeks.map((w, i) => el("tr", {},
-        el("td", { text: `${isoWeek(w)}. hét, ${short(w)}–${short(addDays(w, 6))}` }),
-        table.map(counts => el("td", { text: counts[i].n == null ? "–" : String(counts[i].n) })))))));
-  }
-
-  const tip = $("tip");
-  function showTip(target, value, label) {
-    tip.replaceChildren(el("b", { text: value }), el("span", { text: label }));
-    const r = target.getBoundingClientRect();
-    tip.style.left = `${Math.min(Math.max(r.left + r.width / 2, 110), window.innerWidth - 110)}px`;
-    tip.style.top = `${r.top}px`;
-    tip.hidden = false;
-  }
-  function hideTip() { tip.hidden = true; }
-  window.addEventListener("scroll", hideTip, { passive: true });
 
   function sourceTag(h) {
     if (h.k === "kozlony") return "Magyar Közlöny";
@@ -532,7 +417,7 @@
     feed.replaceChildren(...out);
   }
 
-  function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
+  function render() { renderHealth(); renderFilters(); renderFeed(); }
 
   $("showTech").addEventListener("click", () => { ui.showTech = !ui.showTech; store.set("jf.tech", ui.showTech ? "1" : "0"); ui.shown = PAGE; render(); });
   let qTimer = null;
