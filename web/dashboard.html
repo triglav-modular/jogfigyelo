@@ -36,7 +36,6 @@
 /* Status line */
 .jf-health { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black_text); }
 .jf-status { font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; padding: 2px 8px; border: 2px solid currentColor; }
-.jf-status.ok { color: var(--m_black); }
 .jf-status.bad { color: var(--m_red); }
 .jf-errors { margin: 0; padding: 10px 14px; border-left: 4px solid var(--m_red); font-family: "Space Mono", monospace; font-size: 13px; }
 
@@ -52,7 +51,6 @@
 #sources .jf-btn[aria-pressed="false"] { color: #9a928c; border-color: #cfc8c1; text-decoration: line-through; }
 .jf-btn .n { font-weight: 400; letter-spacing: 0; }
 .jf-btn:disabled { opacity: 0.45; cursor: default; }
-.jf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--m_red); flex: none; }
 .jf-search {
   font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black); background: #fff;
   border: 2px solid var(--m_black); border-radius: 0; padding: 5px 10px; flex: 1 1 100%; width: 100%; min-width: 0; box-sizing: border-box;
@@ -173,7 +171,6 @@
             <div class="jf-filters" role="group" aria-label="Szűrők">
               <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
               <div class="jf-chips" id="sources" role="group" aria-label="Források"></div>
-              <button type="button" class="jf-btn" id="onlyNew" aria-pressed="false"><span class="jf-dot" aria-hidden="true"></span>Csak az újak <span class="n" id="newCount">0</span></button>
               <button type="button" class="jf-btn" id="showTech" aria-pressed="false" title="Csak szövegcserés jogszabály-módosítások és eljárási végzések">Technikai tételek is <span class="n" id="techCount">0</span></button>
             </div>
 
@@ -235,7 +232,7 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") markSeen(); });
   window.addEventListener("pagehide", markSeen);
 
-  const ui = { groups: new Set(GROUPS.map(g => g.key)), onlyNew: false,
+  const ui = { groups: new Set(GROUPS.map(g => g.key)),
     showTech: store.get("jf.tech") === "1", q: "", shown: PAGE };
   try {
     const saved = JSON.parse(store.get("jf.groups") || "null");
@@ -324,8 +321,6 @@
     if (errs.length) {
       box.append(el("span", { class: "jf-status bad" }, `! ${errs.length} forrás hibával`));
       errBox.append(el("ul", { class: "jf-errors", "aria-label": "Az utolsó ellenőrzés hibái" }, errs.map(e => el("li", { text: String(e) }))));
-    } else {
-      box.append(el("span", { class: "jf-status ok" }, "✓ minden forrás rendben"));
     }
   }
 
@@ -342,13 +337,8 @@
         },
       }, g.name, el("span", { class: "n", text: String(n) })));
     });
-    const newN = hits.filter(h => visible(h) && isNew(h)).length;
     $("techCount").textContent = String(hits.filter(hiddenTech).length);
     $("showTech").setAttribute("aria-pressed", String(ui.showTech));
-    $("newCount").textContent = String(newN);
-    $("onlyNew").setAttribute("aria-pressed", String(ui.onlyNew));
-    $("onlyNew").disabled = !newN && !ui.onlyNew;
-    $("onlyNew").title = prevSeen ? `Az előző látogatásod (${stamp(prevSeen)}) óta talált tételek` : "Az első látogatás után jelöli az újonnan talált tételeket";
   }
 
   function renderTiles() {
@@ -516,7 +506,7 @@
     if (!loaded) return;
     const feed = $("feed");
     const q = fold(ui.q.trim());
-    const list = hits.filter(h => ui.groups.has(h._g) && visible(h) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
+    const list = hits.filter(h => ui.groups.has(h._g) && visible(h) && (!q || h._text.includes(q)));
     // Parallel cases often repeat one principle word for word: show them once.
     const groups = [], same = new Map();
     list.forEach(h => {
@@ -544,7 +534,6 @@
 
   function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
 
-  $("onlyNew").addEventListener("click", () => { ui.onlyNew = !ui.onlyNew; ui.shown = PAGE; render(); });
   $("showTech").addEventListener("click", () => { ui.showTech = !ui.showTech; store.set("jf.tech", ui.showTech ? "1" : "0"); ui.shown = PAGE; render(); });
   let qTimer = null;
   $("q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { ui.q = e.target.value; ui.shown = PAGE; renderFeed(); }, 150); });
