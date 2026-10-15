@@ -55,7 +55,7 @@
 .jf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--m_red); flex: none; }
 .jf-search {
   font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black); background: #fff;
-  border: 2px solid var(--m_black); border-radius: 0; padding: 5px 10px; width: 240px; max-width: 100%; min-width: 0;
+  border: 2px solid var(--m_black); border-radius: 0; padding: 5px 10px; flex: 1 1 100%; width: 100%; min-width: 0; box-sizing: border-box;
 }
 
 /* Tiles: the site's thick black rule over each block */
@@ -171,10 +171,10 @@
             <div id="errors"></div>
 
             <div class="jf-filters" role="group" aria-label="Szűrők">
+              <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
               <div class="jf-chips" id="sources" role="group" aria-label="Források"></div>
               <button type="button" class="jf-btn" id="onlyNew" aria-pressed="false"><span class="jf-dot" aria-hidden="true"></span>Csak az újak <span class="n" id="newCount">0</span></button>
               <button type="button" class="jf-btn" id="showTech" aria-pressed="false" title="Csak szövegcserés jogszabály-módosítások és eljárási végzések">Technikai tételek is <span class="n" id="techCount">0</span></button>
-              <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
             </div>
 
             <details class="jf-charts">
