@@ -48,8 +48,6 @@
   display: inline-flex; align-items: center; gap: 6px; border-radius: 0;
 }
 .jf-btn[aria-pressed="true"] { background: var(--m_black); color: #fff; }
-.jf-seg { display: inline-flex; }
-.jf-seg .jf-btn + .jf-btn { border-left-width: 0; }
 .jf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 #sources .jf-btn[aria-pressed="false"] { color: #9a928c; border-color: #cfc8c1; text-decoration: line-through; }
 .jf-btn .n { font-weight: 400; letter-spacing: 0; }
@@ -67,7 +65,6 @@
 .jf-tile-value { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .jf-tile-value b { font-family: "Euclid Square", "Rubik", sans-serif; font-weight: 700; font-size: 56px; line-height: 1; color: var(--m_black); letter-spacing: -0.01em; }
 .jf-tile-value span { font-family: "Space Mono", monospace; font-size: 13px; color: var(--m_black_text); }
-.jf-tile-prev { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; min-height: 1.4em; }
 .jf-spark { position: relative; margin-top: 6px; padding-top: 16px; }
 .jf-spark-cols { display: flex; align-items: flex-end; gap: 3px; height: 48px; border-bottom: 2px solid var(--m_black); }
 .jf-spark-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
@@ -82,7 +79,9 @@
   font-family: "Space Mono", monospace; font-size: 12px; padding: 5px 8px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px));
 }
 .jf-tip b { margin-right: 6px; }
-.jf-table summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+.jf-charts { display: grid; gap: 18px; }
+.jf-charts[open] > summary { margin-bottom: 6px; }
+.jf-charts > summary, .jf-table summary { cursor: pointer; font-family: "Space Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
 .jf-table-scroll { overflow-x: auto; margin-top: 10px; }
 .jf-table table { border-collapse: collapse; font-family: "Space Mono", monospace; font-size: 12px; }
 .jf-table th, .jf-table td { padding: 4px 10px; border-bottom: 1px solid #e3ddd7; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -172,22 +171,19 @@
             <div id="errors"></div>
 
             <div class="jf-filters" role="group" aria-label="Szűrők">
-              <div class="jf-seg" id="range" role="group" aria-label="Időszak">
-                <button type="button" class="jf-btn" data-days="7" aria-pressed="false">7 nap</button>
-                <button type="button" class="jf-btn" data-days="30" aria-pressed="true">30 nap</button>
-                <button type="button" class="jf-btn" data-days="90" aria-pressed="false">90 nap</button>
-                <button type="button" class="jf-btn" data-days="0" aria-pressed="false">Mind</button>
-              </div>
               <div class="jf-chips" id="sources" role="group" aria-label="Források"></div>
               <button type="button" class="jf-btn" id="onlyNew" aria-pressed="false"><span class="jf-dot" aria-hidden="true"></span>Csak az újak <span class="n" id="newCount">0</span></button>
               <button type="button" class="jf-btn" id="showTech" aria-pressed="false" title="Csak szövegcserés jogszabály-módosítások és eljárási végzések">Technikai tételek is <span class="n" id="techCount">0</span></button>
               <input class="jf-search" id="q" type="search" placeholder="Keresés: Mt. 104, pihenőidő…" aria-label="Keresés a találatokban">
             </div>
 
-            <section class="jf-tiles" id="tiles" aria-label="Összesítés forrásonként"></section>
-            <details class="jf-table">
-              <summary>Heti számok táblázatban</summary>
-              <div class="jf-table-scroll" id="weekTable"></div>
+            <details class="jf-charts">
+              <summary>Grafikonok</summary>
+              <section class="jf-tiles" id="tiles" aria-label="Összesítés forrásonként"></section>
+              <details class="jf-table">
+                <summary>Heti számok táblázatban</summary>
+                <div class="jf-table-scroll" id="weekTable"></div>
+              </details>
             </details>
 
             <section aria-labelledby="feedTitle">
@@ -239,9 +235,8 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") markSeen(); });
   window.addEventListener("pagehide", markSeen);
 
-  const ui = { days: Number(store.get("jf.days") || 30), groups: new Set(GROUPS.map(g => g.key)), onlyNew: false,
+  const ui = { groups: new Set(GROUPS.map(g => g.key)), onlyNew: false,
     showTech: store.get("jf.tech") === "1", q: "", shown: PAGE };
-  if (![0, 7, 30, 90].includes(ui.days)) ui.days = 30;
   try {
     const saved = JSON.parse(store.get("jf.groups") || "null");
     if (Array.isArray(saved) && saved.length) ui.groups = new Set(saved.filter(k => GROUPS.some(g => g.key === k)));
@@ -315,10 +310,6 @@
   // act (an annulled phrase can change a right); a court order's flag stands.
   const hiddenTech = h => !!h.technical && !(h.k === "kozlony" && h.ai && h.ai.technical === false);
   const visible = h => ui.showTech || !hiddenTech(h);
-  function rangeBounds(days) {
-    const end = addDays(startOfDay(new Date()), 1);
-    return days ? [addDays(end, -days), end] : [new Date(0), end];
-  }
 
   function renderHealth() {
     const box = $("health"); box.replaceChildren();
@@ -339,11 +330,9 @@
   }
 
   function renderFilters() {
-    document.querySelectorAll("#range button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.days) === ui.days)));
     const box = $("sources"); box.replaceChildren();
-    const [from, to] = rangeBounds(ui.days);
     GROUPS.forEach(g => {
-      const n = hits.filter(h => h._g === g.key && visible(h) && inRange(h, from, to)).length;
+      const n = hits.filter(h => h._g === g.key && visible(h)).length;
       box.append(el("button", {
         type: "button", class: "jf-btn", "aria-pressed": String(ui.groups.has(g.key)),
         onclick: () => {
@@ -354,7 +343,7 @@
       }, g.name, el("span", { class: "n", text: String(n) })));
     });
     const newN = hits.filter(h => visible(h) && isNew(h)).length;
-    $("techCount").textContent = String(hits.filter(h => hiddenTech(h) && inRange(h, from, to)).length);
+    $("techCount").textContent = String(hits.filter(hiddenTech).length);
     $("showTech").setAttribute("aria-pressed", String(ui.showTech));
     $("newCount").textContent = String(newN);
     $("onlyNew").setAttribute("aria-pressed", String(ui.onlyNew));
@@ -366,17 +355,15 @@
     const box = $("tiles"); box.replaceChildren();
     if (!loaded) {
       GROUPS.forEach(g => box.append(el("article", { class: "jf-tile" }, el("div", { class: "jf-label", text: g.name }),
-        el("div", { class: "jf-tile-value" }, el("b", { text: "–" })), el("div", { class: "jf-tile-prev", text: " " }))));
+        el("div", { class: "jf-tile-value" }, el("b", { text: "–" })))));
       return;
     }
-    const [from, to] = rangeBounds(ui.days);
     const weeks = [], thisMon = monday(new Date());
     for (let i = 11; i >= 0; i--) weeks.push(addDays(thisMon, -7 * i));
     const table = [];
     GROUPS.forEach(g => {
       const mine = hits.filter(h => h._g === g.key && visible(h));
-      const value = mine.filter(h => inRange(h, from, to)).length;
-      const prev = ui.days ? mine.filter(h => inRange(h, addDays(from, -ui.days), from)).length : null;
+      const value = mine.length;
       const cov = coverage[g.key];
       const counts = weeks.map(w => {
         const end = addDays(w, 7);
@@ -400,8 +387,7 @@
       });
       box.append(el("article", { class: "jf-tile" },
         el("div", { class: "jf-label", text: g.name }),
-        el("div", { class: "jf-tile-value" }, el("b", { text: String(value) }), el("span", { text: `${g.unit} · ${ui.days ? ui.days + " nap" : "összesen"}` })),
-        el("div", { class: "jf-tile-prev", text: prev == null ? " " : `előző ${ui.days} nap: ${prev}` }),
+        el("div", { class: "jf-tile-value" }, el("b", { text: String(value) }), el("span", { text: `${g.unit} · összesen` })),
         el("div", { class: "jf-spark" },
           el("span", { class: "jf-spark-max", text: `max. ${max}/hét` }),
           el("div", { class: "jf-spark-cols" }, cols),
@@ -529,9 +515,8 @@
   function renderFeed() {
     if (!loaded) return;
     const feed = $("feed");
-    const [from, to] = rangeBounds(ui.days);
     const q = fold(ui.q.trim());
-    const list = hits.filter(h => ui.groups.has(h._g) && visible(h) && inRange(h, from, to) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
+    const list = hits.filter(h => ui.groups.has(h._g) && visible(h) && (!ui.onlyNew || isNew(h)) && (!q || h._text.includes(q)));
     // Parallel cases often repeat one principle word for word: show them once.
     const groups = [], same = new Map();
     list.forEach(h => {
@@ -540,7 +525,7 @@
     });
     $("feedCount").textContent = list.length ? `${list.length} tétel` : "";
     if (!hits.length) { feed.replaceChildren(el("p", { class: "jf-empty", text: "Még nincs adat." })); return; }
-    if (!groups.length) { feed.replaceChildren(el("p", { class: "jf-empty", text: "Ebben a szűrésben nincs találat. Válassz hosszabb időszakot vagy több forrást." })); return; }
+    if (!groups.length) { feed.replaceChildren(el("p", { class: "jf-empty", text: "Ebben a szűrésben nincs találat. Válassz több forrást, vagy keress másra." })); return; }
     const out = []; let cur = null, items = null;
     groups.slice(0, ui.shown).forEach(g => {
       if (g[0]._d.getTime() !== cur) {
@@ -559,9 +544,6 @@
 
   function render() { renderHealth(); renderFilters(); renderTiles(); renderFeed(); }
 
-  document.querySelectorAll("#range button").forEach(b => b.addEventListener("click", () => {
-    ui.days = Number(b.dataset.days); ui.shown = PAGE; store.set("jf.days", String(ui.days)); render();
-  }));
   $("onlyNew").addEventListener("click", () => { ui.onlyNew = !ui.onlyNew; ui.shown = PAGE; render(); });
   $("showTech").addEventListener("click", () => { ui.showTech = !ui.showTech; store.set("jf.tech", ui.showTech ? "1" : "0"); ui.shown = PAGE; render(); });
   let qTimer = null;
