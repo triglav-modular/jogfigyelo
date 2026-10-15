@@ -1116,8 +1116,9 @@ def feed_entry(h):
         para(h.get("kind"))
         para(h.get("title"))
         decision()
-    if h.get("ai"):
-        para(h["ai"]["impact"], "Összefoglaló")
+    if h.get("ai"):  # first, where the source's own summary would open the entry
+        body.insert(1 if body[:1] == ["<p><b>Erős jelzés</b></p>"] else 0,
+                    f'<p><b>Összefoglaló:</b> {e(h["ai"]["impact"])}</p>')
     return title, link or SITE, tags, "".join(body)
 
 

@@ -15,6 +15,11 @@ stay on the data branch; the export leaves them out, and no new ones are
 asked for. The technical second opinion is only used for gazette acts, so
 nothing else depended on them.
 
+The machine summary takes the place the source's own summary has: right
+under the case number, or under a gazette act's title, as the entry's body
+text, with the decision after it in the smaller block. It keeps a small
+"Összefoglaló" label so it is not taken for the court's principle.
+
 ## 2026-10-12 · The page is built from a kept copy when amunka.hu refuses
 
 The scheduled run on 2026-10-12 failed at Publish: `build_page.py` got

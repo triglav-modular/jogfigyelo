@@ -139,9 +139,8 @@
 .jf .jf-summary.jf-excerpt, .jf .jf-excerpt { margin: 0; padding-left: 12px; border-left: 4px solid var(--m_red); font-size: 0.98em; text-align: left; hyphens: manual; }
 .jf-excerpt mark { background: var(--m_yellow); color: inherit; padding: 0 1px; }
 .jf-item.is-tech { opacity: 0.75; }
-.jf-ai { display: grid; gap: 4px; font-family: "Rubik", sans-serif; font-size: 14px; line-height: 1.55; color: var(--m_black_text); border-left: 3px solid var(--m_yellow); padding-left: 10px; margin-top: 2px; overflow-wrap: anywhere; }
+.jf-ai { display: grid; gap: 2px; min-width: 0; }
 .jf-ai > b { font-family: "Space Mono", monospace; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #6e6660; }
-.jf .jf-ai p { margin: 0; text-align: left; hyphens: manual; }
 .jf-loadmore { justify-self: start; }
 .jf-foot { font-family: "Space Mono", monospace; font-size: 12px; color: #6e6660; margin: 0; max-width: 555px; text-align: left; }
 </style>
@@ -454,23 +453,23 @@
     return [p];
   }
 
-  function decisionBlock(h, principle) {
-    // The principle is the body text; the decision follows it in a smaller
-    // block. Without a principle the decision is the body.
-    const out = [];
-    if (principle) out.push(...summaryBlock(principle));
-    if (h.outcome) {
-      const label = [h.form || "döntés", h.decided && parseDay(h.decided) ? short(parseDay(h.decided)) : null].filter(Boolean).join(" · ");
-      out.push(el("div", { class: "jf-decision" + (principle ? "" : " main") }, el("b", { text: label }), h.outcome));
-    }
-    return out;
+  // The entry's summary opens it: the source's own (a principle, a headnote),
+  // or else the automatic one, labelled as such (the footer says how it is made).
+  function topSummary(h, own) {
+    if (own) return summaryBlock(own);
+    if (!h.ai || !h.ai.impact) return [];
+    return [el("div", { class: "jf-ai" }, el("b", { text: "Összefoglaló" }), el("p", { class: "jf-summary", text: h.ai.impact }))];
   }
 
-  function aiBlock(h) {
-    // Machine-written: set apart, and the footer says so.
-    const a = h.ai;
-    if (!a || !a.impact) return null;
-    return el("div", { class: "jf-ai" }, el("b", { text: "Összefoglaló" }), el("p", { text: a.impact }));
+  function decisionBlock(h, top) {
+    // The summary is the body text; the decision follows it in a smaller
+    // block. Without a summary the decision is the body.
+    const out = [...top];
+    if (h.outcome) {
+      const label = [h.form || "döntés", h.decided && parseDay(h.decided) ? short(parseDay(h.decided)) : null].filter(Boolean).join(" · ");
+      out.push(el("div", { class: "jf-decision" + (top.length ? "" : " main") }, el("b", { text: label }), h.outcome));
+    }
+    return out;
   }
 
   function itemNode(group) {
@@ -484,6 +483,7 @@
     if (h.k === "kozlony") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" })));
       if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
+      kids.push(...topSummary(h, null));
       const changes = Array.isArray(h.changes) ? h.changes : [];
       const topic = h.topic && typeof h.topic === "object" ? h.topic : null;
       const chips = [];
@@ -499,27 +499,23 @@
       kids.push(el("div", { class: "jf-refs" }, group.map((x, i) => el("span", {},
         i === 0 || x.court !== group[i - 1].court ? el("span", { class: "jf-court", text: (x.court || "") + " " }) : null,
         link(x.ref || "határozat", x.pdf, "jf-ref") || el("span", { class: "jf-ref", text: x.ref || "" })))));
-      kids.push(...decisionBlock(h, h.summary));
+      kids.push(...decisionBlock(h, topSummary(h, h.summary)));
       kids.push(meta(group.length > 1 ? el("span", { text: `${group.length} határozat azonos elvi tartalommal` }) : null,
         h.technical ? el("span", { text: h.technical }) : null));
     } else if (h.k === "kuria") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-court", text: h.ref || "" })));
-      if (h.outcome) kids.push(...decisionBlock(h, h.title));
-      else if (h.title) kids.push(...summaryBlock(h.title));
+      kids.push(...decisionBlock(h, topSummary(h, h.title !== h.ref ? h.title : null)));
       kids.push(meta(scorePill(h), link("A Kúria oldalán", h.url), terms(h)));
     } else if (h.k === "kuria_bh") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-page", text: h.case || "" })));
-      kids.push(...decisionBlock(h, h.title));
+      kids.push(...decisionBlock(h, topSummary(h, h.title)));
       kids.push(meta(h.section ? el("span", { text: h.section }) : null, link(h.issue || "Lapszám (PDF)", h.url)));
     } else if (h.k === "ab") {
       kids.push(el("div", { class: "jf-refs" }, el("span", { class: "jf-ref", text: h.ref || "" }), el("span", { class: "jf-court", text: h.kind || "" })));
       if (h.title) kids.push(el("p", { class: "jf-title", text: h.title }));
-      kids.push(...decisionBlock(h, null));
+      kids.push(...decisionBlock(h, topSummary(h, null)));
       kids.push(meta(link("Döntés (PDF)", h.pdf), link("Adatlap", h.url), terms(h)));
     }
-    // The analysis goes above the links line that closes every entry.
-    const ai = aiBlock(h);
-    if (ai) kids.splice(kids.length - 1, 0, ai);
     return el("article", { class: "jf-item" + (hiddenTech(h) ? " is-tech" : "") }, kids);
   }
 
