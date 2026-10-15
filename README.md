@@ -38,8 +38,11 @@ git -C data add -A && git -C data commit -m Futás && git -C data push
 
 ### Summaries
 
-`elemzes.py` sends each new find to Claude Haiku (`claude-haiku-5-5`) with its
-full text: the decision's PDF, the Kúria's page, or the gazette act re-read
+`elemzes.py` summarises each find that has no summary of its own: court
+decisions published without a principle (elvi tartalom), gazette acts, AB
+decisions and Kúria press releases. Decisions with a principle, Kúriai
+Döntések headnotes and Kúria decisions with a subject open with that and get
+none. Each find goes to Claude Haiku (`claude-haiku-5-5`) with its full text: the decision's PDF, the Kúria's page, or the gazette act re-read
 from its issue. The answer is a one-sentence summary of at most about 30 words
 (what changes for workers; for a gazette act, what the amended rule says) and a
 second opinion on whether it is only technical. A gazette act the rules mark

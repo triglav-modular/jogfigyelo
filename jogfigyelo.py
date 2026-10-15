@@ -987,6 +987,18 @@ DASHBOARD_FIELDS = ("ref", "title", "summary", "court", "label", "url", "pdf", "
 AI_FIELDS = ("impact", "technical")
 
 
+def own_summary(h):
+    """The summary the source gives a find itself, which opens its entry:
+    a decision's principle (elvi tartalom), a Kúriai Döntések headnote, a
+    Kúria decision's subject. Gazette acts, AB decisions and Kúria press
+    releases have none, and nor has a decision published without one."""
+    if h["source"] == "bhgy":
+        return h.get("summary", "")
+    if h["source"] in ("kuria", "kuria_bh") and h.get("title") != h.get("ref"):
+        return h.get("title", "")
+    return ""
+
+
 def hidden(row):
     """Hidden by default: technical by the rules.
 
@@ -1021,7 +1033,8 @@ def export(data, out):
         row.update({f: h[f] for f in DASHBOARD_FIELDS if h.get(f) not in (None, "", [])})
         if h.get("terms"):
             row["terms"] = h["terms"][:5]
-        if (h["source"], h["id"]) in ai:
+        # A machine summary only where the source gives none of its own.
+        if (h["source"], h["id"]) in ai and not own_summary(h):
             row["ai"] = ai[(h["source"], h["id"])]
         rows.append(row)
     runs = read_jsonl(data / "runs.jsonl")

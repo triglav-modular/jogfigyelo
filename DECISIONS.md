@@ -3,6 +3,18 @@
 What was decided, why, and what was rejected. The README describes the
 watcher as it is; this file keeps how it got there.
 
+## 2026-10-15 · Machine summaries only where the source has none
+
+The owner's call: an entry that opens with the source's own summary gets no
+machine summary under it. That is a decision's principle (elvi tartalom), a
+Kúriai Döntések headnote, a Kúria decision's subject (`own_summary` in
+`jogfigyelo.py`). On 2026-10-15 that left 142 of 369 finds with one: 129
+decisions published without a principle, 10 gazette acts, one AB decision,
+two Kúria press releases. The summaries already written for the other 227
+stay on the data branch; the export leaves them out, and no new ones are
+asked for. The technical second opinion is only used for gazette acts, so
+nothing else depended on them.
+
 ## 2026-10-12 · The page is built from a kept copy when amunka.hu refuses
 
 The scheduled run on 2026-10-12 failed at Publish: `build_page.py` got

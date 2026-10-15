@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Ask Claude Haiku what each find means, and keep the answers.
 
-For every find on DATA/talalatok.jsonl that has no analysis yet on
-DATA/elemzesek.jsonl, the source is read in full (the decision's PDF, the
+For every find on DATA/talalatok.jsonl that has no summary of its own (see
+jogfigyelo.own_summary) and none yet on DATA/elemzesek.jsonl, the source is
+read in full (the decision's PDF, the
 Kúria's page, the gazette act re-read from its issue) and sent to Claude
 Haiku in one request, which answers with:
 
@@ -336,7 +337,8 @@ def main():
     # written (ask), so an abbreviation the count trips on is not asked daily.
     latest = {(a["source"], a["id"]): a for a in jf.read_jsonl(out)}
     done = {k for k, a in latest.items() if a.get("refused") or a.get("v") == VERSION}
-    todo = [h for h in latest_finds(args.data) if (h["source"], h["id"]) not in done][:args.limit]
+    todo = [h for h in latest_finds(args.data)
+            if (h["source"], h["id"]) not in done and not jf.own_summary(h)][:args.limit]
     errors = []
 
     if args.dry_run:
