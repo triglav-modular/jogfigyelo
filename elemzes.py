@@ -47,6 +47,9 @@ MODEL = "claude-haiku-5-5"
 NJT = "https://njt.hu/jogszabaly/"
 NJT_BLOCKS = "https://njt.jog.gov.hu/ajax/njtGetBlock.json"
 NJT_DAYS = 7
+# A copy older than this fails the run: the before-wording it gives may then
+# miss an amendment made in between.
+NJT_STALE_DAYS = 30
 WORKERS = 4
 
 # Bumped when what is asked changes; finds summarised under an older version
@@ -381,13 +384,25 @@ def main():
             log.flush()
             analysed += 1
 
-    refresh_snapshots(package.statutes, args.data, errors)
+    njt_errors = []
+    refresh_snapshots(package.statutes, args.data, njt_errors)
     print(f"{analysed}/{len(todo)} elemzés: {out}")
-    for e in errors:
+    for e in errors + njt_errors:
         print(f"hiba: {e}")
+    # The copies age quietly when njt.hu refuses the refresh: say so in the
+    # run (a GitHub annotation), and fail it once the oldest is stale.
+    ages = [(dt.date.today() - dt.date.fromisoformat(s["fetched"])).days
+            for s in (jf.load_json(p, None) for p in (args.data / "njt").glob("*.json")) if s]
+    oldest = max(ages, default=0)
+    if njt_errors:
+        print(f"::warning::njt.hu: {len(njt_errors)} törvény másolata nem frissült ({njt_errors[0]}); "
+              f"a legrégebbi {oldest} napos")
+    stale = oldest > NJT_STALE_DAYS
+    if stale:
+        print(f"::error::A njt.hu-másolatok közül a legrégebbi {oldest} napos (határ: {NJT_STALE_DAYS})")
     # Transient failures are retried next run; they fail the run only when
     # nothing got through, which is how a bad key or an outage looks.
-    return 1 if todo and not analysed else 0
+    return 1 if stale or (todo and not analysed) else 0
 
 
 if __name__ == "__main__":

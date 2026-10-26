@@ -22,8 +22,10 @@ Actions tab.
 
 A run writes a Markdown report to `data/jelentesek/`, appends its finds to
 `data/talalatok.jsonl` and itself to `data/runs.jsonl`, and remembers what it
-has seen in `data/state.json`. A source that fails is left unmarked, retried
-on the next run, and the run fails so it is noticed.
+has seen in `data/state.json`. A source that fails is tried once more at the
+end of the run, five minutes later (`retry_after` in `config.toml`). If it
+fails again it is left unmarked for the next run, and the run fails so it is
+noticed.
 
 `data/` is the `data` branch checked out as a worktree. To run by hand:
 
@@ -52,7 +54,9 @@ summarises every find again.
 
 The old wording of an amended section comes from `data/njt/`, a copy of each
 statute in `torvenyek.toml` from njt.hu (which shows only the text in force
-today), refreshed weekly after the summaries. `python3 elemzes.py --dry-run`
+today), refreshed weekly after the summaries. A refused refresh shows as a
+warning on the run; once the oldest copy is more than 30 days old the run
+fails. `python3 elemzes.py --dry-run`
 prints what would be sent.
 
 ### Publishing

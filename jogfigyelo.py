@@ -1215,7 +1215,9 @@ def main():
 
     only = set(args.only.split(",")) if args.only else None
 
-    def run(source, check):
+    retries = []
+
+    def run(source, check, last_try=False):
         if only and source not in only:
             return
         seen = state["seen"].setdefault(source, {})
@@ -1224,7 +1226,10 @@ def main():
         try:
             found, marked = check(seen, cutoff)
         except Exception as e:
-            errors.append(f"{source}: {e}")
+            if last_try:
+                errors.append(f"{source}: {e}")
+            else:
+                retries.append((source, check, e))
             return
         hits.extend(found)
         seen.update(marked)
@@ -1239,6 +1244,13 @@ def main():
     run("kuria", lambda seen, cutoff: check_kuria_lists(cfg, scorer, seen, cutoff))
     run("kuria_bh", lambda seen, cutoff: check_kuria_journal(cfg, scorer, seen, cutoff, errors))
     run("ab", lambda seen, cutoff: check_ab(cfg, scorer, seen, cutoff))
+    if retries:
+        pause = cfg.get("retry_after", 300)
+        for source, _, e in retries:
+            print(f"{source}: {e}; újra {pause} mp múlva")
+        time.sleep(pause)
+        for source, check, _ in retries:
+            run(source, check, last_try=True)
 
     text = report(hits, errors, now) if hits or errors else None
     if args.dry_run:

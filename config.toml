@@ -35,6 +35,11 @@ ab_min_score = 3
 # and remember the rest as already seen.
 first_run_days = 14
 
+# A source that fails is tried once more at the end of the run, this many
+# seconds later; only a second failure counts. Some sites refuse a single
+# cloud runner's address for a while (eakta.birosag.hu, 2026-10-26).
+retry_after = 300
+
 # Which of the gazette's publications to read. The feed also carries
 # "Hivatalos Értesítő" and "Indokolások Tára".
 kozlony_types = ["Magyar Közlöny"]

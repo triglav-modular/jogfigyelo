@@ -3,6 +3,21 @@
 What was decided, why, and what was rejected. The README describes the
 watcher as it is; this file keeps how it got there.
 
+## 2026-10-26 · One retry per failed source; njt.hu copies that age are reported
+
+The 2026-10-26 run failed: eakta.birosag.hu refused that runner's
+connection on both searches, while the nine runs before it, and a home
+connection the same morning, got through. A failed source is now tried once
+more at the end of the run after `retry_after` seconds (300); only a second
+failure is an error.
+
+The same day showed that njt.hu had refused every weekly refresh from GitHub
+since 2026-10-16 ("Remote end closed connection", all 16 statutes). The run
+only printed the errors, so the copies stayed at 2026-10-08 unnoticed. A
+refused refresh is now a warning annotation on the run, and a copy older
+than 30 days fails it. A one-off workflow (`njt-diagnose.yml`) probes whether
+njt.hu refuses the runners by address or by the request.
+
 ## 2026-10-15 · Machine summaries only where the source has none
 
 The owner's call: an entry that opens with the source's own summary gets no
