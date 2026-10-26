@@ -44,7 +44,9 @@ from pathlib import Path
 import jogfigyelo as jf
 
 MODEL = "claude-haiku-5-5"
-NJT = "https://njt.hu/jogszabaly/"
+# The host njt.hu redirects to. Asked directly, because njt.hu itself drops
+# connections from GitHub runners (same server, different name; 2026-10-26).
+NJT = "https://njt.jog.gov.hu/jogszabaly/"
 NJT_BLOCKS = "https://njt.jog.gov.hu/ajax/njtGetBlock.json"
 NJT_DAYS = 7
 # A copy older than this fails the run: the before-wording it gives may then

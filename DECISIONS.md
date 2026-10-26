@@ -15,8 +15,12 @@ The same day showed that njt.hu had refused every weekly refresh from GitHub
 since 2026-10-16 ("Remote end closed connection", all 16 statutes). The run
 only printed the errors, so the copies stayed at 2026-10-08 unnoticed. A
 refused refresh is now a warning annotation on the run, and a copy older
-than 30 days fails it. A one-off workflow (`njt-diagnose.yml`) probes whether
-njt.hu refuses the runners by address or by the request.
+than 30 days fails it. A one-off probe from a runner (`njt-diagnose.yml`, run
+40307497328, then removed) found it was the name, not the address: `njt.hu`
+dropped every request (any user agent, HTTP/1.1 or 2), while `njt.jog.gov.hu`,
+the host it redirects to and the same server (84.206.128.18), answered 200 to
+all of them, the block request included. The copies are fetched from
+`njt.jog.gov.hu` directly.
 
 ## 2026-10-15 · Machine summaries only where the source has none
 
