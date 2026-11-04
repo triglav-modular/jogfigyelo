@@ -64,6 +64,11 @@ def main():
                         f'<link rel="canonical" href="{URL}" />', "canonical link")
     # The source page's own Markdown twin is not this page's.
     page = re.sub(r'<link rel="alternate" type="text/markdown"[^>]*>\s*', "", page)
+    # The borrowed page marks its own menu entry as current; this page is none of them.
+    header = re.search(r'<header id="header">.*?</header>', page, re.S)
+    if not header:
+        sys.exit(f'{CHROME}: <header id="header"> not found; has the theme changed?')
+    page = page[:header.start()] + header.group(0).replace('class="active"', 'class=""') + page[header.end():]
     page = replace_once(page, r"</head>", part(fragment, "head") + "</head>", "</head>")
     page = replace_once(page, r'<section id="body".*?(?=<footer id="footer")', part(fragment, "body"),
                         'content between <section id="body"> and <footer id="footer">')

@@ -425,6 +425,21 @@
 
   render();
 
+  // The logo and both menus are swapped for the live home page's on every
+  // visit, so a change to the site's menu shows here at once. The copy built
+  // into this page stays when the home page cannot be fetched or has changed
+  // shape. The theme's menu handlers are on the document, not these elements.
+  fetch("/", { cache: "no-cache" })
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+    .then(html => {
+      const live = new DOMParser().parseFromString(html, "text/html");
+      const fresh = [live.querySelector("#logo"), ...live.querySelectorAll("#header ul.navigation")];
+      const here = [document.querySelector("#logo"), ...document.querySelectorAll("#header ul.navigation")];
+      if (fresh.length !== here.length || fresh.includes(null) || here.includes(null)) return;
+      here.forEach((node, i) => node.replaceWith(document.importNode(fresh[i], true)));
+    })
+    .catch(() => { /* keep the built-in header */ });
+
   // data.json sits beside this page and is rewritten after every run.
   fetch("data.json", { cache: "no-cache" })
     .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
