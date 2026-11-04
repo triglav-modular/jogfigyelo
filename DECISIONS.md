@@ -3,6 +3,30 @@
 What was decided, why, and what was rejected. The README describes the
 watcher as it is; this file keeps how it got there.
 
+## 2026-11-04 · The header and menu follow the live site on every visit
+
+The owner asked for the page always to carry the site's current header and
+menu. On 2026-11-04 amunka.hu's menu was cut to the sections and tags that
+have a published post, and the page still showed the full menu of its last
+build, with Rólunk marked as current because the chrome is borrowed from
+`/rolunk`.
+
+The page's script now fetches `/` on load and replaces `#logo` and both
+`#header ul.navigation` lists with the home page's; it keeps the built-in
+copy if the fetch fails or the counts differ. The theme's menu code binds to
+the document (dropdown closing) and to `.panel-activation` (outside the
+lists), so swapping the lists keeps it working. `build_page.py` clears
+`class="active"` inside `<header id="header">`, so the built copy marks no
+entry either. Checked on the live page: one fetch of `/` at load, the menu
+equal to the home page's, no entry marked; with an entry removed by hand the
+swap put it back.
+
+Rejected: borrowing from `/` at build time (its body and wrapper classes,
+`home title-center` and `collection-page`, would change the page's layout);
+rendering the page through Grav, or a PHP wrapper fetching the chrome per
+request (both change how the page is served, for the same result); a more
+frequent rebuild (still stale between runs).
+
 ## 2026-10-26 · One retry per failed source; njt.hu copies that age are reported
 
 The 2026-10-26 run failed: eakta.birosag.hu refused that runner's

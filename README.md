@@ -69,7 +69,10 @@ the FTP credentials in the environment (the workflow) or in a `.env` with
 The page is `web/dashboard.html`, the dashboard alone. `build_page.py` puts it
 inside the chrome of a live amunka.hu page (head, header and menu, footer,
 cookie consent), so it carries the site's current design without a copy of
-it here, and writes `web/index.html`. Each build keeps the borrowed page as
+it here, and writes `web/index.html`. No menu entry is marked as the current
+page. On every visit the page also takes its logo and menus from the live
+home page, so a change to the site's menu shows on it at once; the built-in
+copy stays if that fetch fails. Each build keeps the borrowed page as
 `data/chrome.html`; when amunka.hu refuses the request (its proxy turns away
 some GitHub runner addresses), the page is built from that copy and the run
 shows a warning. The folder sits outside Grav: the
