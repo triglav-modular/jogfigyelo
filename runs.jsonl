@@ -59,3 +59,4 @@
 {"at": "2026-11-13T13:14:21+01:00", "found": {"bhgy": 2}, "errors": []}
 {"at": "2026-11-14T12:28:59+01:00", "found": {"kozlony": 2, "bhgy": 2}, "errors": []}
 {"at": "2026-11-15T12:58:07+01:00", "found": {"bhgy": 1}, "errors": ["kuria: /hu/jogegysegi-hatarozatok-hatalyos: nincs tétel az oldalon; megváltozott a szerkezete?", "kuria_bh: nincs lapszám az oldalon; megváltozott a szerkezete?"]}
+{"at": "2026-11-16T13:46:09+01:00", "found": {"bhgy": 2}, "errors": []}
